@@ -118,7 +118,7 @@ https://github.com/microsoft/zerotrustassessment/issues
 		if ($Pillar -ne 'All' -and $exportCfg.Pillar -notcontains $Pillar) { continue }
 		if ($exportCfg.Environment -and $exportCfg.Environment -notcontains $azureEnvironment) { continue }
 		if ($exportCfg.IncludePlan -and $entraIDPlan -notin $exportCfg.IncludePlan) { continue }
-		if ($exportCfg.ExcludePlan -and $entraIDPlan -in $exportCfg.IncludePlan) { continue }
+		if ($exportCfg.ExcludePlan -and $entraIDPlan -in $exportCfg.ExcludePlan) { continue }
 
 		if ($exportCfg.DependsOn -and $includedExports -notcontains $exportCfg.DependsOn) {
 			# Dependencies must exist, be viable and come first in the order within the config file
