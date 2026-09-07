@@ -10,7 +10,7 @@
     AATP_PrivilegedAccountsWithDelegationAllowed and the latest per-control score snapshot, then returns:
       Pass        – All monitored privileged accounts are marked sensitive and cannot be delegated.
       Fail        – One or more monitored privileged accounts can be delegated.
-      Investigate – The MDI posture control is absent or has been set to Ignored.
+      Investigate – The MDI posture control or score data is absent, incomplete, inconsistent, or has been set to Ignored.
 
 .NOTES
     Test ID: 41004
@@ -195,13 +195,17 @@ function Test-Assessment-41004 {
         return
     }
 
-    # ── Evaluate Pass / Fail ──
+    # ── Evaluate Pass / Fail / Investigate ──
     if ($currentScore -eq $maxScore) {
         $passed = $true
         $testResultMarkdown = '✅ All privileged accounts in monitored Active Directory domains have the "Account is sensitive and cannot be delegated" flag set.'
     }
-    else {
+    elseif ($currentScore -lt $maxScore) {
         $testResultMarkdown = '❌ One or more privileged accounts in monitored Active Directory domains can be delegated and are exposed to Kerberos delegation abuse.'
+    }
+    else {
+        $customStatus = 'Investigate'
+        $testResultMarkdown = '⚠️ Microsoft Secure Score returned inconsistent data for this recommendation, so the result could not be evaluated reliably. Verify the Secure Score data and re-run the assessment.'
     }
     $testResultMarkdown += "`n`n%TestResult%"
 
@@ -209,13 +213,13 @@ function Test-Assessment-41004 {
 
     #region Report Generation
 
-    $statusLabel = if ($passed) { '✅ Pass' } else { '❌ Fail' }
+    $statusLabel = if ($customStatus -eq 'Investigate') { '⚠️ Investigate' } elseif ($passed) { '✅ Pass' } else { '❌ Fail' }
     $titleMarkdown = Get-SafeMarkdown -Text $profileTitle
     $recommendationLink = if ([string]::IsNullOrWhiteSpace($actionUrl)) { '—' } else { "[Defender XDR]($actionUrl)" }
     $failUrl = if ([string]::IsNullOrWhiteSpace($actionUrl)) { 'https://security.microsoft.com/securescore?viewid=actions' } else { $actionUrl }
 
     $mdFailLink = ''
-    if (-not $passed) {
+    if (-not $passed -and $customStatus -ne 'Investigate') {
         $mdFailLink = "`n## [Defender XDR > Secure Score > Recommendations]($failUrl)`n"
     }
 
