@@ -107,7 +107,7 @@ ORDER BY displayName
     $sqlQ3 = @"
 SELECT id, createdDateTime, resourceId
 FROM main.SignIn
-WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
+WHERE createdDateTime::TIMESTAMP >= '$lookbackDate'::TIMESTAMP
     AND isInteractive = true
 "@
     try {
