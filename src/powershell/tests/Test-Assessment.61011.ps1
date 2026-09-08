@@ -128,7 +128,7 @@ FROM main.SignIn
 WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
     AND isInteractive = false
   AND agent.agentType = 'agenticAppInstance'
-    AND json_extract_string(to_json(agent), '$.agentSubjectType') IS DISTINCT FROM 'agentIDuser'
+    AND agent.agentSubjectType IS DISTINCT FROM 'agentIDuser'
 "@
     try {
         $agenticSignIns = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlQ4)
