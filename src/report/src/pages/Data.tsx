@@ -1,10 +1,12 @@
 import { PageHeader, PageHeaderHeading } from "@/components/page-header";
 import { DlpWorkloadCoverageCard } from "@/components/overview/dlp-workload-coverage";
 import { SensitivityLabelProtectionSankey } from "@/components/overview/sensitivity-label-protection-sankey";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { columns } from "@/components/test-table/columns";
 import { DataTable } from "@/components/test-table/data-table";
 import { reportData } from "@/config/report-data";
+import { Database } from "lucide-react";
 
 export default function Data() {
     const hasSensitivityLabelProtection = Object.prototype.hasOwnProperty.call(
@@ -22,12 +24,35 @@ export default function Data() {
                 <PageHeaderHeading>Data</PageHeaderHeading>
             </PageHeader>
             {(hasSensitivityLabelProtection || hasDlpWorkloadCoverage) && (
-                <div className="mb-6 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
-                    {hasSensitivityLabelProtection && <SensitivityLabelProtectionSankey />}
-                    {hasDlpWorkloadCoverage && (
-                        <DlpWorkloadCoverageCard data={reportData.TenantInfo?.DlpWorkloadCoverage} />
-                    )}
-                </div>
+                <Card className="mb-6">
+                    <CardContent className="px-4 pb-3 pt-1">
+                        <Accordion type="single" collapsible defaultValue="data-insights" className="w-full">
+                            <AccordionItem value="data-insights" className="border-b-0">
+                                <AccordionTrigger className="py-3 hover:no-underline">
+                                    <div className="flex flex-1 items-center gap-3 text-left">
+                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">
+                                            <Database className="size-5" />
+                                        </div>
+                                        <div className="flex flex-col gap-0.5">
+                                            <span className="text-lg font-semibold leading-none">Data insights</span>
+                                            <span className="text-sm font-normal text-muted-foreground">
+                                                An overview of your data classification, protection, and governance posture.
+                                            </span>
+                                        </div>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="pb-2">
+                                    <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+                                        {hasSensitivityLabelProtection && <SensitivityLabelProtectionSankey />}
+                                        {hasDlpWorkloadCoverage && (
+                                            <DlpWorkloadCoverageCard data={reportData.TenantInfo?.DlpWorkloadCoverage} />
+                                        )}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </CardContent>
+                </Card>
             )}
             <Card>
                 <CardHeader>
