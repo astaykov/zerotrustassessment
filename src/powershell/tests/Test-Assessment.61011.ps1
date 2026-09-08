@@ -52,10 +52,9 @@ function Test-Assessment-61011 {
     # Q1: Enumerate all agent identities from the exported database
     Write-ZtProgress -Activity $activity -Status 'Getting agent identities (Q1)'
     $sqlQ1 = @"
-SELECT id, appId, displayName, agentIdentityBlueprintId
-FROM main.ServicePrincipal
-WHERE "@odata.type" = '#microsoft.graph.agentIdentity'
-  AND accountEnabled = 1
+    SELECT id, agentAppId AS appId, displayName, agentIdentityBlueprintId
+    FROM main.AgentIdentity
+    WHERE accountEnabled = 1
 ORDER BY displayName
 "@
     try {
@@ -76,8 +75,7 @@ ORDER BY displayName
     Write-ZtProgress -Activity $activity -Status 'Getting agent identity blueprints (Q2)'
     $sqlQ2 = @"
 SELECT id, appId, displayName
-FROM main.Application
-WHERE "@odata.type" = '#microsoft.graph.agentIdentityBlueprint'
+    FROM main.AgentIdentityBlueprint
 ORDER BY displayName
 "@
     try {
@@ -102,34 +100,38 @@ ORDER BY displayName
 
     $lookbackDate = (Get-Date).ToUniversalTime().AddDays(-30).ToString('yyyy-MM-ddTHH:mm:ssZ')
 
-    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints (live Graph — sign-in logs are not exported)
+    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints
     Write-ZtProgress -Activity $activity -Status 'Getting interactive user sign-ins (Q3)'
     $q3QueryError = $null
     $interactiveSignIns = @()
+    $sqlQ3 = @"
+SELECT id, createdDateTime, resourceId
+FROM main.SignIn
+WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
+    AND isInteractive = true
+"@
     try {
-        $interactiveSignIns = @(Invoke-ZtGraphRequest `
-            -RelativeUri 'auditLogs/signIns' `
-            -ApiVersion beta `
-            -Filter "createdDateTime ge $lookbackDate and signInEventTypes/any(t:t eq 'interactiveUser')" `
-            -Select @('id', 'createdDateTime', 'userPrincipalName', 'appId', 'resourceId', 'resourceDisplayName', 'signInEventTypes') `
-            -ErrorAction Stop)
+        $interactiveSignIns = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlQ3)
     }
     catch {
         $q3QueryError = $_
         Write-PSFMessage "Failed to retrieve interactive sign-in logs: $_" -Tag Test -Level Warning
     }
 
-    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users (live Graph — sign-in logs are not exported)
+    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users
     Write-ZtProgress -Activity $activity -Status 'Getting agentic non-interactive sign-ins (Q4)'
     $q4QueryError = $null
     $agenticSignIns = @()
+    $sqlQ4 = @"
+SELECT id, createdDateTime, agent.parentAppId AS parentAppId
+FROM main.SignIn
+WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
+    AND isInteractive = false
+  AND agent.agentType = 'agenticAppInstance'
+    AND json_extract_string(to_json(agent), '$.agentSubjectType') IS DISTINCT FROM 'agentIDuser'
+"@
     try {
-        $agenticSignIns = @(Invoke-ZtGraphRequest `
-            -RelativeUri 'auditLogs/signIns' `
-            -ApiVersion beta `
-            -Filter "createdDateTime ge $lookbackDate and signInEventTypes/any(t:t eq 'nonInteractiveUser') and agent/agentType eq 'agenticAppInstance' and agent/agentSubjectType ne 'agentIDuser'" `
-            -Select @('id', 'createdDateTime', 'userPrincipalName', 'appId', 'resourceId', 'resourceDisplayName', 'signInEventTypes', 'agent') `
-            -ErrorAction Stop)
+        $agenticSignIns = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlQ4)
     }
     catch {
         $q4QueryError = $_
@@ -150,7 +152,7 @@ ORDER BY displayName
     # Group Q4 records by agent.parentAppId (blueprint appId)
     $agenticSignInsByParentAppId = @{}
     foreach ($signIn in $agenticSignIns) {
-        $parentAppId = $signIn.agent.parentAppId
+        $parentAppId = $signIn.parentAppId
         if (-not [string]::IsNullOrEmpty($parentAppId)) {
             if (-not $agenticSignInsByParentAppId.ContainsKey($parentAppId)) {
                 $agenticSignInsByParentAppId[$parentAppId] = [System.Collections.Generic.List[object]]::new()
