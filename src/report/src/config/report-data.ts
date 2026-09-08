@@ -24,6 +24,7 @@ export interface TenantInfo {
   OverviewM365ProtectionCircuit?: M365ProtectionCircuitSankeyData | null;
   OverviewPrivateAccess?: PrivateAccessSankeyData | null;
   SensitivityLabelProtection?: SensitivityLabelProtectionSankeyData | null;
+  DlpWorkloadCoverage?: DlpWorkloadCoverage | null;
   ConfigWindowsEnrollment?: ConfigWindowsEnrollment[] | null;
   ConfigDeviceEnrollmentRestriction?: ConfigDeviceEnrollmentRestriction[] | null;
   ConfigDeviceCompliancePolicies?: ConfigDeviceCompliancePolicies[] | null;
@@ -31,6 +32,16 @@ export interface TenantInfo {
   DeviceOverview?: DeviceOverview | null;
   TenantOverview?: TenantOverview | null;
   AgentOverview?: AgentOverview | null;
+}
+
+export interface DlpWorkloadCoverage {
+  exchangePolicyCount: number;
+  sharePointPolicyCount: number;
+  oneDrivePolicyCount: number;
+  teamsPolicyCount: number;
+  endpointPolicyCount: number;
+  copilotPolicyCount: number;
+  coveredWorkloadCount: number;
 }
 
 export interface AgentOwnershipDistribution {

@@ -42,6 +42,7 @@ import { SensitivityLabelProtectionSankey } from "@/components/overview/sensitiv
 import { AzureNetSecPlanes, hasAzureNetSecData } from "@/components/overview/azure-netsec-planes";
 import { AgentOwnershipDistribution } from "@/components/overview/agent-ownership-distribution";
 import { DeviceAntivirusProtectionCard } from "@/components/overview/device-antivirus-protection";
+import { DlpWorkloadCoverageCard } from "@/components/overview/dlp-workload-coverage";
 import { Separator } from "@/components/ui/separator";
 import { formatNumber } from "@/lib/format-utils";
 import { buildDeviceCoverageRows } from "@/lib/device-coverage";
@@ -109,6 +110,11 @@ export default function Dashboard() {
     const compliantDeviceCount = hasComplianceTotals ? rawCompliantDeviceCount : 0;
     const nonCompliantDeviceCount = hasComplianceTotals ? rawNonCompliantDeviceCount : discoveredDeviceTotal;
     const totalComplianceDeviceCount = compliantDeviceCount + nonCompliantDeviceCount;
+    const hasDlpWorkloadCoverage = reportData.TenantInfo != null
+        && Object.prototype.hasOwnProperty.call(reportData.TenantInfo, "DlpWorkloadCoverage");
+    const hasSensitivityLabelProtection = reportData.TenantInfo != null
+        && Object.prototype.hasOwnProperty.call(reportData.TenantInfo, "SensitivityLabelProtection");
+    const hasAgentOwnershipDistribution = reportData.TenantInfo?.AgentOwnershipDistribution != null;
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -1108,7 +1114,6 @@ export default function Dashboard() {
                         </Card>
                         )}
 
-                        <DeviceAntivirusProtectionCard />
                         {/* {<Card
                             className="max-w-xs" x-chunk="charts-01-chunk-2"
                         >
@@ -1311,18 +1316,8 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* AI overview */}
-            {reportData.TenantInfo?.AgentOwnershipDistribution && (
-                <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
-                    <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
-                </div>
-            )}
-
             {/* Network overview */}
-            {(hasSwgData() || hasPrivateAccessData() || Object.prototype.hasOwnProperty.call(
-                reportData.TenantInfo ?? {},
-                "SensitivityLabelProtection",
-            )) && (
+            {(hasSwgData() || hasPrivateAccessData()) && (
                 <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
                     {hasSwgData() && (
                         <Card className="h-full">
@@ -1343,12 +1338,26 @@ export default function Dashboard() {
                         </Card>
                     )}
                     {hasPrivateAccessData() && <PrivateAccessSankey />}
-                    {Object.prototype.hasOwnProperty.call(
-                        reportData.TenantInfo ?? {},
-                        "SensitivityLabelProtection",
-                    ) && <SensitivityLabelProtectionSankey />}
                 </div>
             )}
+
+            {/* Data overview */}
+            {(hasSensitivityLabelProtection || hasDlpWorkloadCoverage) && (
+                <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {hasSensitivityLabelProtection && <SensitivityLabelProtectionSankey />}
+                    {hasDlpWorkloadCoverage && (
+                        <DlpWorkloadCoverageCard data={reportData.TenantInfo?.DlpWorkloadCoverage} />
+                    )}
+                </div>
+            )}
+
+            {/* Device and AI overview */}
+            <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <DeviceAntivirusProtectionCard />
+                {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+                    <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
+                )}
+            </div>
 
             {hasAzureNetSecData() && (
                 <Card className="mt-[26px]">

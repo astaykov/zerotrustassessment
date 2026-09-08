@@ -43,6 +43,7 @@ import { SensitivityLabelProtectionSankey } from "@/components/overview/sensitiv
 import { AzureNetSecPlanes, hasAzureNetSecData } from "@/components/overview/azure-netsec-planes";
 import { AgentOwnershipDistribution } from "@/components/overview/agent-ownership-distribution";
 import { DeviceAntivirusProtectionCard } from "@/components/overview/device-antivirus-protection";
+import { DlpWorkloadCoverageCard } from "@/components/overview/dlp-workload-coverage";
 import { Separator } from "@/components/ui/separator";
 import { formatNumber } from "@/lib/format-utils";
 import { buildDeviceCoverageRows } from "@/lib/device-coverage";
@@ -110,6 +111,11 @@ export default function Dashboard() {
     const compliantDeviceCount = hasComplianceTotals ? rawCompliantDeviceCount : 0;
     const nonCompliantDeviceCount = hasComplianceTotals ? rawNonCompliantDeviceCount : discoveredDeviceTotal;
     const totalComplianceDeviceCount = compliantDeviceCount + nonCompliantDeviceCount;
+    const hasDlpWorkloadCoverage = reportData.TenantInfo != null
+        && Object.prototype.hasOwnProperty.call(reportData.TenantInfo, "DlpWorkloadCoverage");
+    const hasSensitivityLabelProtection = reportData.TenantInfo != null
+        && Object.prototype.hasOwnProperty.call(reportData.TenantInfo, "SensitivityLabelProtection");
+    const hasAgentOwnershipDistribution = reportData.TenantInfo?.AgentOwnershipDistribution != null;
 
     return (
         <TooltipProvider delayDuration={200}>
@@ -1273,28 +1279,15 @@ export default function Dashboard() {
                             </Card>
                         )}
 
-                    <DeviceAntivirusProtectionCard />
-
                 </div>
             </div>
             </div>
-
-            {/* AI overview */}
-            {reportData.TenantInfo?.AgentOwnershipDistribution && (
-                <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 gap-6 lg:grid-cols-2">
-                    <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
-                </div>
-            )}
 
             {/* Network overview */}
             {(() => {
                 const swg = hasSwgData();
                 const privateAccess = hasPrivateAccessData();
-                const sensitivityLabels = Object.prototype.hasOwnProperty.call(
-                    reportData.TenantInfo ?? {},
-                    "SensitivityLabelProtection",
-                );
-                if (!swg && !privateAccess && !sensitivityLabels) return null;
+                if (!swg && !privateAccess) return null;
 
                 return (
                     <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
@@ -1317,10 +1310,27 @@ export default function Dashboard() {
                             </Card>
                         )}
                         {privateAccess && <PrivateAccessSankey />}
-                        {sensitivityLabels && <SensitivityLabelProtectionSankey />}
                     </div>
                 );
             })()}
+
+            {/* Data overview */}
+            {(hasSensitivityLabelProtection || hasDlpWorkloadCoverage) && (
+                <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
+                    {hasSensitivityLabelProtection && <SensitivityLabelProtectionSankey />}
+                    {hasDlpWorkloadCoverage && (
+                        <DlpWorkloadCoverageCard data={reportData.TenantInfo?.DlpWorkloadCoverage} />
+                    )}
+                </div>
+            )}
+
+            {/* Device and AI overview */}
+            <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
+                <DeviceAntivirusProtectionCard />
+                {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+                    <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
+                )}
+            </div>
 
             {/* Network - Azure Network Security Defense Planes Section */}
             {hasAzureNetSecData() && (
@@ -1343,6 +1353,7 @@ export default function Dashboard() {
                 </Card>
             </div>
             )}
+
         </TooltipProvider>
     )
 }

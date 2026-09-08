@@ -1,4 +1,5 @@
 import { PageHeader, PageHeaderHeading } from "@/components/page-header";
+import { SensitivityLabelProtectionSankey } from "@/components/overview/sensitivity-label-protection-sankey";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { columns } from "@/components/test-table/columns";
 import { DataTable } from "@/components/test-table/data-table";
@@ -10,6 +11,14 @@ export default function Data() {
             <PageHeader>
                 <PageHeaderHeading>Data</PageHeaderHeading>
             </PageHeader>
+            {Object.prototype.hasOwnProperty.call(
+                reportData.TenantInfo ?? {},
+                "SensitivityLabelProtection",
+            ) && (
+                <div className="mb-6">
+                    <SensitivityLabelProtectionSankey />
+                </div>
+            )}
             <Card>
                 <CardHeader>
                     <CardTitle className="mb-3">Assessment results</CardTitle>
