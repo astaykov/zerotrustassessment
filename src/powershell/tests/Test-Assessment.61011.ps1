@@ -54,7 +54,7 @@ function Test-Assessment-61011 {
     $sqlQ1 = @"
     SELECT id, agentAppId AS appId, displayName, agentIdentityBlueprintId
     FROM main.AgentIdentity
-    WHERE accountEnabled = 1
+    WHERE accountEnabled = true
 ORDER BY displayName
 "@
     try {
