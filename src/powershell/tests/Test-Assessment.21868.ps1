@@ -50,12 +50,12 @@ WHERE userType = 'Guest'
         -RelativeUri 'applications' `
         -Select 'id', 'appId', 'displayName' `
         -QueryParameters @{ '$expand' = 'owners($select=id,displayName,userPrincipalName,userType,accountEnabled)' } `
-        -ApiVersion 'v1.0'
+        -ApiVersion 'beta'
 
     foreach ($app in $allApp) {
         $owners = @($app.owners)
         if ($owners.Count -eq 20) {
-            $owners = @(Invoke-ZtGraphRequest -RelativeUri "applications/$($app.id)/owners/microsoft.graph.user?$queryParameters" -ApiVersion 'v1.0')
+            $owners = @(Invoke-ZtGraphRequest -RelativeUri "applications/$($app.id)/owners/microsoft.graph.user?$queryParameters" -ApiVersion 'beta')
         }
 
         foreach ($owner in $owners) {
