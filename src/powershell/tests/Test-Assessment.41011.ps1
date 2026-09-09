@@ -177,7 +177,7 @@ function Test-Assessment-41011 {
     $formatTemplate = @'
 
 {0}
-| Recommendation title | Current score | Maximum score | Control state | Defender XDR Recommendation Link | Status |
+| Recommendation title | Current score | Maximum score | Control state | Defender XDR recommendation link | Status |
 | :------------------- | :-----------: | :-----------: | :------------ | :-------------------------------- | :----: |
 {1}
 '@
