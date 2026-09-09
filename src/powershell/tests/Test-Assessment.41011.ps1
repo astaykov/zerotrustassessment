@@ -53,6 +53,7 @@ function Test-Assessment-41011 {
     }
     catch {
         $statusCode = Get-ZtHttpStatusCode -ErrorRecord $_
+        Write-PSFMessage "Failed to retrieve the DC-Sync Secure Score control profile: $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
         if ($statusCode -in (401, 403)) {
             $investigateParams.Result = '⚠️ The Secure Score control profile could not be read because the request was not authorized. Verify the caller has the SecurityEvents.Read.All permission (Entra role: Security Reader) and re-run.'
             Add-ZtTestResultDetail @investigateParams
@@ -74,6 +75,7 @@ function Test-Assessment-41011 {
             $latestScore = $scoreResponse.value | Select-Object -First 1
         }
         catch {
+            Write-PSFMessage "Failed to retrieve the latest Secure Score snapshot: $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
             Add-ZtTestResultDetail @investigateParams
             return
         }
@@ -157,7 +159,6 @@ function Test-Assessment-41011 {
     #endregion Assessment Logic
 
     #region Report Generation
-    $scoreDisplay        = "$currentScore / $maxScore"
     $controlStateDisplay = $latestState
     $statusDisplay       = if ($passed) { '✅ Pass' } else { '❌ Fail' }
 
