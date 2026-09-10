@@ -140,7 +140,10 @@ function Test-Assessment-41011 {
         return
     }
 
-    $currentScore = $controlScoreEntry.score
+    $currentScore         = $controlScoreEntry.score
+    $scoreInPercentage    = $controlScoreEntry.scoreInPercentage
+    $implementationStatus = $controlScoreEntry.implementationStatus
+    $lastSynced           = $controlScoreEntry.lastSynced
 
     if ($null -eq $currentScore -or $null -eq $maxScore) {
         $investigateParams.Result = '⚠️ The Secure Score control returned incomplete score data. Re-run the assessment and investigate if the issue persists.'
@@ -148,45 +151,57 @@ function Test-Assessment-41011 {
         return
     }
 
+    $customStatus = $null
+
     if ($currentScore -eq $maxScore) {
         $passed             = $true
         $testResultMarkdown = "✅ No non-administrative accounts hold Directory Replication permissions in monitored domains.`n`n%TestResult%"
     }
-    else {
+    elseif ($currentScore -lt $maxScore) {
         $passed             = $false
         $testResultMarkdown = "❌ One or more non-administrative accounts hold Directory Replication permissions and can replicate domain credentials.`n`n%TestResult%"
+    }
+    else {
+        $passed             = $false
+        $customStatus       = 'Investigate'
+        $testResultMarkdown = "⚠️ The Secure Score control returned inconsistent score data. Current score is greater than maximum score; re-run the assessment and investigate if the issue persists.`n`n%TestResult%"
     }
     #endregion Assessment Logic
 
     #region Report Generation
-    $controlStateDisplay = $latestState
-    $statusDisplay       = if ($passed) { '✅ Pass' } else { '❌ Fail' }
+    $scoreDisplay          = "$currentScore / $maxScore"
+    $percentageDisplay     = if ($null -ne $scoreInPercentage) { "$scoreInPercentage%" } else { '—' }
+    $implementationDisplay = if (-not [string]::IsNullOrEmpty($implementationStatus)) { $implementationStatus } else { '—' }
+    $lastSyncedDisplay     = if (-not [string]::IsNullOrEmpty($lastSynced)) { Get-FormattedDate -DateString $lastSynced } else { '—' }
+    $controlStateDisplay   = $latestState
+    $statusDisplay         = if ($passed) { '✅ Pass' } elseif ($customStatus -eq 'Investigate') { '⚠️ Investigate' } else { '❌ Fail' }
 
-    $defenderLink = 'https://security.microsoft.com/securescore?viewid=actions'
+    $defenderLink = 'https://security.microsoft.com/securescore?viewid=actions&actionId=AATP_NonAdminDCSyncAccounts'
     $portalLine = ''
-    if (-not $passed) {
-        $portalLine = "`n## [Defender XDR > Secure Score > Recommendations]($defenderLink)`n"
-    }
-
-    $actionUrlMarkdown = if (-not [string]::IsNullOrWhiteSpace($actionUrl)) {
-        "[Defender XDR]($actionUrl)"
-    }
-    else {
-        '—'
+    if (-not $passed -and $customStatus -ne 'Investigate') {
+        $portalLine = "[Defender XDR > Secure Score > Recommendations]($defenderLink)`n`n"
     }
 
     $formatTemplate = @'
 
-{0}
-| Recommendation title | Current score | Maximum score | Control state | Defender XDR recommendation link | Status |
-| :------------------- | :-----------: | :-----------: | :------------ | :-------------------------------- | :----: |
-{1}
+{0}| Recommendation title | Current score / Maximum score | Score percentage | Implementation status | Last synced | Control state | Status |
+| :------------------- | ----------------------------: | :--------------- | :-------------------- | :---------- | :------------ | :----- |
+| {1} | {2} | {3} | {4} | {5} | {6} | {7} |
 '@
 
-    $tableRows = "| $(Get-SafeMarkdown $controlTitle) | $currentScore | $maxScore | $controlStateDisplay | $actionUrlMarkdown | $statusDisplay |`n"
-    $mdInfo = $formatTemplate -f $portalLine, $tableRows
+    $recommendationTitle = "[$(Get-SafeMarkdown $controlTitle)]($defenderLink)"
+    $mdInfo = $formatTemplate -f $portalLine, $recommendationTitle, $scoreDisplay, $percentageDisplay, $implementationDisplay, $lastSyncedDisplay, $controlStateDisplay, $statusDisplay
     $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
     #endregion Report Generation
 
-    Add-ZtTestResultDetail -TestId '41011' -Title $title -Status $passed -Result $testResultMarkdown
+    $params = @{
+        TestId = '41011'
+        Title  = $title
+        Status = $passed
+        Result = $testResultMarkdown
+    }
+    if ($customStatus) {
+        $params.CustomStatus = $customStatus
+    }
+    Add-ZtTestResultDetail @params
 }
