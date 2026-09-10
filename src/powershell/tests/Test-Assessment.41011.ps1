@@ -170,13 +170,13 @@ function Test-Assessment-41011 {
 
     #region Report Generation
     $scoreDisplay          = "$currentScore / $maxScore"
-    $percentageDisplay     = if ($null -ne $scoreInPercentage) { "$scoreInPercentage%" } else { '—' }
+    $percentageDisplay     = if ($null -ne $scoreInPercentage) { "$([math]::Round($scoreInPercentage, 1))%" } else { '—' }
     $implementationDisplay = if (-not [string]::IsNullOrEmpty($implementationStatus)) { $implementationStatus } else { '—' }
     $lastSyncedDisplay     = if (-not [string]::IsNullOrEmpty($lastSynced)) { Get-FormattedDate -DateString $lastSynced } else { '—' }
     $controlStateDisplay   = $latestState
     $statusDisplay         = if ($passed) { '✅ Pass' } elseif ($customStatus -eq 'Investigate') { '⚠️ Investigate' } else { '❌ Fail' }
 
-    $defenderLink = 'https://security.microsoft.com/securescore?viewid=actions&actionId=AATP_NonAdminDCSyncAccounts'
+    $defenderLink = 'https://security.microsoft.com/securescore?viewid=actions'
     $portalLine = ''
     if (-not $passed -and $customStatus -ne 'Investigate') {
         $portalLine = "[Defender XDR > Secure Score > Recommendations]($defenderLink)`n`n"
@@ -189,7 +189,12 @@ function Test-Assessment-41011 {
 | {1} | {2} | {3} | {4} | {5} | {6} | {7} |
 '@
 
-    $recommendationTitle = "[$(Get-SafeMarkdown $controlTitle)]($defenderLink)"
+    $recommendationTitle = if (-not [string]::IsNullOrWhiteSpace($actionUrl)) {
+        "[$(Get-SafeMarkdown $controlTitle)]($actionUrl)"
+    }
+    else {
+        Get-SafeMarkdown $controlTitle
+    }
     $mdInfo = $formatTemplate -f $portalLine, $recommendationTitle, $scoreDisplay, $percentageDisplay, $implementationDisplay, $lastSyncedDisplay, $controlStateDisplay, $statusDisplay
     $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
     #endregion Report Generation
