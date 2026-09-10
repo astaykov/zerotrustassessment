@@ -74,7 +74,7 @@ Note: Avoid using the same names as used for the "General Parameters" section of
 @{
 	Name = 'Application'
 	Uri = 'beta/applications'
-	QueryString = '$top=999'
+	QueryString = '$top=999&$select=id,appId,displayName,signInAudience,tags,passwordCredentials,keyCredentials,servicePrincipalLockConfiguration'
 	RelatedPropertyNames = @()
 	Type = 'Default' # PrivilegedGroup
 
