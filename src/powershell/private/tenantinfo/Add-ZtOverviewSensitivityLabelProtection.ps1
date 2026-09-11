@@ -98,6 +98,13 @@ function Add-ZtOverviewSensitivityLabelProtection {
         }
 
         $source = "$totalLabelCount labels"
+        $nodes = @(
+            @{ source = $source; target = 'Encryption + DKE'; value = $encryptionDkeCount }
+            @{ source = $source; target = 'Encryption'; value = $encryptionCount }
+            @{ source = $source; target = 'Visual marking only'; value = $visualMarkingOnlyCount }
+            @{ source = $source; target = 'Classification only'; value = $classificationOnlyCount }
+        ) | Where-Object { $_.value -gt 0 }
+
         $summary = @{
             description               = 'Strongest protection applied by configured sensitivity labels.'
             totalLabelCount           = $totalLabelCount
@@ -105,12 +112,7 @@ function Add-ZtOverviewSensitivityLabelProtection {
             encryptionCount           = $encryptionCount
             visualMarkingOnlyCount    = $visualMarkingOnlyCount
             classificationOnlyCount   = $classificationOnlyCount
-            nodes                     = @(
-                @{ source = $source; target = 'Encryption + DKE'; value = $encryptionDkeCount }
-                @{ source = $source; target = 'Encryption'; value = $encryptionCount }
-                @{ source = $source; target = 'Visual marking only'; value = $visualMarkingOnlyCount }
-                @{ source = $source; target = 'Classification only'; value = $classificationOnlyCount }
-            )
+            nodes                     = @($nodes)
         }
 
         Add-ZtTenantInfo -Name $tenantInfoName -Value $summary
