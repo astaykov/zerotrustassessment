@@ -1114,6 +1114,8 @@ export default function Dashboard() {
                         </Card>
                         )}
 
+                        <DeviceAntivirusProtectionCard />
+
                         {/* {<Card
                             className="max-w-xs" x-chunk="charts-01-chunk-2"
                         >
@@ -1351,13 +1353,11 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Device and AI overview */}
-            <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <DeviceAntivirusProtectionCard />
-                {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+            {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+                <div className="mt-[26px] grid grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
-                )}
-            </div>
+                </div>
+            )}
 
             {hasAzureNetSecData() && (
                 <Card className="mt-[26px]">

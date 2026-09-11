@@ -1279,6 +1279,8 @@ export default function Dashboard() {
                             </Card>
                         )}
 
+                    <DeviceAntivirusProtectionCard />
+
                 </div>
             </div>
             </div>
@@ -1324,13 +1326,11 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Device and AI overview */}
-            <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
-                <DeviceAntivirusProtectionCard />
-                {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+            {hasAgentOwnershipDistribution && reportData.TenantInfo?.AgentOwnershipDistribution && (
+                <div className="mx-auto mt-6 grid w-full max-w-7xl grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
                     <AgentOwnershipDistribution data={reportData.TenantInfo.AgentOwnershipDistribution} />
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Network - Azure Network Security Defense Planes Section */}
             {hasAzureNetSecData() && (
