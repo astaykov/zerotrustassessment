@@ -38,7 +38,7 @@ function Test-Assessment-41119 {
 
     # Recursively collects every setting instance in a policy's settings tree, including
     # instances nested inside choiceSettingValue.children, choiceSettingCollectionValue,
-    # groupSettingCollectionValue.children and groupSettingValue.children paths.
+    # simpleSettingCollectionValue, groupSettingCollectionValue and groupSettingValue.children paths.
     function Get-AllSettingInstances {
         param([array]$SettingInstances)
         $result = [System.Collections.Generic.List[object]]::new()
@@ -52,6 +52,13 @@ function Test-Assessment-41119 {
                 foreach ($csv in $si.choiceSettingCollectionValue) {
                     if ($csv.children) {
                         $result.AddRange([object[]](Get-AllSettingInstances -SettingInstances @($csv.children)))
+                    }
+                }
+            }
+            if ($si.simpleSettingCollectionValue) {
+                foreach ($ssv in $si.simpleSettingCollectionValue) {
+                    if ($ssv.children) {
+                        $result.AddRange([object[]](Get-AllSettingInstances -SettingInstances @($ssv.children)))
                     }
                 }
             }
@@ -133,9 +140,9 @@ function Test-Assessment-41119 {
         if ([string]::IsNullOrWhiteSpace($templateFamily)) { $templateFamily = 'none' }
 
         # PolicySummaryBlade deep link requires technology, templateId and platformName segments.
-        $technologies = [string]$policy.technologies
+        $technologies = @($policy.technologies) -join ','
         $templateId = [string]$policy.templateReference.templateId
-        $platforms = [string]$policy.platforms
+        $platforms = @($policy.platforms) -join ','
 
         # Assignment comes from the $expand=assignments projection on the list query.
         # Classify as Assigned / Unassigned / Unknown so conflicting or absent/unusable signals
@@ -282,7 +289,7 @@ function Test-Assessment-41119 {
 
     #region Assessment Logic
 
-    # Only policies that actually carry the control are evaluable; N/A policies are excluded from the roll-up and from display.
+    # Only policies that actually carry the control are evaluable; N/A policies are excluded from the roll-up.
     $evaluableResults = @($evaluationResults | Where-Object { $_.Status -ne 'N/A' })
     $passed = $false
     $customStatus = $null
@@ -344,15 +351,17 @@ function Test-Assessment-41119 {
 
     if ($tableRows.Count -gt 0) {
         $countLine = if ($isTruncated) {
-            "Showing first 10 of $totalCount policies`n`n"
+            "Showing first 10 of $totalCount policies"
         } else {
-            "Total policies: $totalCount`n`n"
+            "Total policies: $totalCount"
         }
         $mdInfo = @"
 
 ## [Intune configuration profiles]($portalUrl)
 
-$countLine| Policy name | Template family | Assigned | Assignment targets | Setting definition ID | Raw setting value | Normalized state | Details | Status |
+$countLine
+
+| Policy name | Template family | Assigned | Assignment targets | Setting definition ID | Raw setting value | Normalized state | Details | Status |
 | :---------- | :-------------- | :------- | :----------------- | :-------------------- | :---------------- | :--------------- | :------ | :----- |
 $($tableRows -join "`n")
 "@
