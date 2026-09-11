@@ -52,10 +52,9 @@ function Test-Assessment-61011 {
     # Q1: Enumerate all agent identities from the exported database
     Write-ZtProgress -Activity $activity -Status 'Getting agent identities (Q1)'
     $sqlQ1 = @"
-SELECT id, appId, displayName, agentIdentityBlueprintId
-FROM main.ServicePrincipal
-WHERE "@odata.type" = '#microsoft.graph.agentIdentity'
-  AND accountEnabled = 1
+    SELECT id, agentAppId AS appId, displayName, agentIdentityBlueprintId
+    FROM main.AgentIdentity
+    WHERE accountEnabled = true
 ORDER BY displayName
 "@
     try {
@@ -76,8 +75,7 @@ ORDER BY displayName
     Write-ZtProgress -Activity $activity -Status 'Getting agent identity blueprints (Q2)'
     $sqlQ2 = @"
 SELECT id, appId, displayName
-FROM main.Application
-WHERE "@odata.type" = '#microsoft.graph.agentIdentityBlueprint'
+    FROM main.AgentIdentityBlueprint
 ORDER BY displayName
 "@
     try {
@@ -102,7 +100,7 @@ ORDER BY displayName
 
     $lookbackDate = (Get-Date).ToUniversalTime().AddDays(-30).ToString('yyyy-MM-ddTHH:mm:ssZ')
 
-    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints (live Graph — sign-in logs are not exported)
+    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints (live Graph; sign-in logs are not exported)
     Write-ZtProgress -Activity $activity -Status 'Getting interactive user sign-ins (Q3)'
     $q3QueryError = $null
     $interactiveSignIns = @()
@@ -119,7 +117,7 @@ ORDER BY displayName
         Write-PSFMessage "Failed to retrieve interactive sign-in logs: $_" -Tag Test -Level Warning
     }
 
-    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users (live Graph — sign-in logs are not exported)
+    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users (live Graph; sign-in logs are not exported)
     Write-ZtProgress -Activity $activity -Status 'Getting agentic non-interactive sign-ins (Q4)'
     $q4QueryError = $null
     $agenticSignIns = @()

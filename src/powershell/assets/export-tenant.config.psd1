@@ -100,7 +100,7 @@ Note: Avoid using the same names as used for the "General Parameters" section of
 @{
 	Name = 'SignIn'
 	Uri = 'beta/auditlogs/signins'
-	QueryString = '%AuditQueryString%'
+	QueryString = '%AuditQueryString%&$select=id,createdDateTime,isInteractive,status,conditionalAccessStatus,authenticationRequirement,deviceDetail,resourceId,agent'
 	RelatedPropertyNames = @()
 	Type = 'Default' # PrivilegedGroup
 
