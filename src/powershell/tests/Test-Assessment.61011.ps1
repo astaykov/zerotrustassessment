@@ -148,7 +148,7 @@ ORDER BY displayName
     # Group Q4 records by agent.parentAppId (blueprint appId)
     $agenticSignInsByParentAppId = @{}
     foreach ($signIn in $agenticSignIns) {
-        $parentAppId = $signIn.parentAppId
+        $parentAppId = $signIn.agent.parentAppId
         if (-not [string]::IsNullOrEmpty($parentAppId)) {
             if (-not $agenticSignInsByParentAppId.ContainsKey($parentAppId)) {
                 $agenticSignInsByParentAppId[$parentAppId] = [System.Collections.Generic.List[object]]::new()
