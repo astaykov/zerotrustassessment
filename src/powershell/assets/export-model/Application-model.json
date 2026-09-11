@@ -11,6 +11,16 @@
       "tags": [
         "model"
       ],
+      "owners": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "00000000-0000-0000-0000-000000000000",
+          "displayName": "model",
+          "userPrincipalName": "model@example.com",
+          "userType": "Member",
+          "accountEnabled": true
+        }
+      ],
       "passwordCredentials": [
         {
           "startDateTime": "1900-01-01T00:00:00Z",
