@@ -100,38 +100,34 @@ ORDER BY displayName
 
     $lookbackDate = (Get-Date).ToUniversalTime().AddDays(-30).ToString('yyyy-MM-ddTHH:mm:ssZ')
 
-    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints
+    # Q3: Last 30 days of interactive user sign-ins targeting agent blueprints (live Graph; sign-in logs are not exported)
     Write-ZtProgress -Activity $activity -Status 'Getting interactive user sign-ins (Q3)'
     $q3QueryError = $null
     $interactiveSignIns = @()
-    $sqlQ3 = @"
-SELECT id, createdDateTime, resourceId
-FROM main.SignIn
-WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
-    AND isInteractive = true
-"@
     try {
-        $interactiveSignIns = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlQ3)
+        $interactiveSignIns = @(Invoke-ZtGraphRequest `
+            -RelativeUri 'auditLogs/signIns' `
+            -ApiVersion beta `
+            -Filter "createdDateTime ge $lookbackDate and signInEventTypes/any(t:t eq 'interactiveUser')" `
+            -Select @('id', 'createdDateTime', 'userPrincipalName', 'appId', 'resourceId', 'resourceDisplayName', 'signInEventTypes') `
+            -ErrorAction Stop)
     }
     catch {
         $q3QueryError = $_
         Write-PSFMessage "Failed to retrieve interactive sign-in logs: $_" -Tag Test -Level Warning
     }
 
-    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users
+    # Q4: Last 30 days of agentic non-interactive sign-ins on behalf of real users (live Graph; sign-in logs are not exported)
     Write-ZtProgress -Activity $activity -Status 'Getting agentic non-interactive sign-ins (Q4)'
     $q4QueryError = $null
     $agenticSignIns = @()
-    $sqlQ4 = @"
-SELECT id, createdDateTime, agent.parentAppId AS parentAppId
-FROM main.SignIn
-WHERE createdDateTime >= TIMESTAMPTZ '$lookbackDate'
-    AND isInteractive = false
-  AND agent.agentType = 'agenticAppInstance'
-    AND json_extract_string(to_json(agent), '$.agentSubjectType') IS DISTINCT FROM 'agentIDuser'
-"@
     try {
-        $agenticSignIns = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlQ4)
+        $agenticSignIns = @(Invoke-ZtGraphRequest `
+            -RelativeUri 'auditLogs/signIns' `
+            -ApiVersion beta `
+            -Filter "createdDateTime ge $lookbackDate and signInEventTypes/any(t:t eq 'nonInteractiveUser') and agent/agentType eq 'agenticAppInstance' and agent/agentSubjectType ne 'agentIDuser'" `
+            -Select @('id', 'createdDateTime', 'userPrincipalName', 'appId', 'resourceId', 'resourceDisplayName', 'signInEventTypes', 'agent') `
+            -ErrorAction Stop)
     }
     catch {
         $q4QueryError = $_
