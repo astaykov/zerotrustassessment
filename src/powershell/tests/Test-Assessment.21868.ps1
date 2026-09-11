@@ -26,21 +26,6 @@ function Test-Assessment-21868 {
     $activity = "Checking Guests don't own apps in the tenant"
     Write-ZtProgress -Activity $activity -Status "Getting applications and service principals"
 
-    $sqlApp = @'
-    select distinct ON (id) id, appId, displayName
-    from Application
-    order by displayName DESC
-'@
-
-    $sqlSP = @'
-    select distinct ON (id) id, appId, displayName
-    from ServicePrincipal
-    order by displayName DESC
-'@
-
-    $allApp = Invoke-DatabaseQuery -Database $Database -Sql $sqlApp
-    $allSP = Invoke-DatabaseQuery -Database $Database -Sql $sqlSP
-
     $queryParameters = '$select=id,displayName,userPrincipalName'
 
     # Initialize lists for guest owners only
@@ -61,33 +46,63 @@ WHERE userType = 'Guest'
         [void]$guestUserIds.Add($guest.id)
     }
 
-    # Filter owners to only include guests
+    $allApp = Invoke-ZtGraphRequest `
+        -RelativeUri 'applications' `
+        -Select 'id', 'appId', 'displayName' `
+        -QueryParameters @{ '$expand' = 'owners($select=id,displayName,userPrincipalName,userType,accountEnabled)' } `
+        -ApiVersion 'beta'
+
     foreach ($app in $allApp) {
-        $owners = Invoke-ZtGraphRequest -RelativeUri "applications/$($app.id)/owners/microsoft.graph.user?$queryParameters" -ApiVersion 'v1.0'
-        if ($owners) {
-            foreach ($owner in $owners) {
-                $owner | Add-Member -MemberType NoteProperty -Name 'appDisplayName' -Value $app.displayName -Force -PassThru |
-                    Add-Member -MemberType NoteProperty -Name 'appObjectId' -Value $app.id -Force -PassThru |
-                        Add-Member -MemberType NoteProperty -Name 'appId' -Value $app.appId -Force
-                if ($guestUserIds.Contains($owner.id)) {
-                    $guestAppOwners.Add($owner)
-                }
+        $owners = @($app.owners)
+        if ($owners.Count -eq 20) {
+            $owners = @(Invoke-ZtGraphRequest -RelativeUri "applications/$($app.id)/owners/microsoft.graph.user?$queryParameters" -ApiVersion 'beta')
+        }
+
+        foreach ($owner in $owners) {
+            $owner | Add-Member -MemberType NoteProperty -Name 'appDisplayName' -Value $app.displayName -Force -PassThru |
+                Add-Member -MemberType NoteProperty -Name 'appObjectId' -Value $app.id -Force -PassThru |
+                    Add-Member -MemberType NoteProperty -Name 'appId' -Value $app.appId -Force
+            if ($guestUserIds.Contains($owner.id)) {
+                $guestAppOwners.Add($owner)
             }
         }
     }
 
-    foreach ($sp in $allSP) {
-        $owners = Invoke-ZtGraphRequest -RelativeUri "servicePrincipals/$($sp.id)/owners/microsoft.graph.user?$queryParameters" -ApiVersion 'v1.0'
-        if ($owners) {
-            foreach ($owner in $owners) {
-                $owner | Add-Member -MemberType NoteProperty -Name 'spDisplayName' -Value $sp.displayName -Force -PassThru |
-                    Add-Member -MemberType NoteProperty -Name 'spObjectId' -Value $sp.id -Force -PassThru |
-                        Add-Member -MemberType NoteProperty -Name 'spAppId' -Value $sp.appId -Force
-                if ($guestUserIds.Contains($owner.id)) {
-                    $guestSpOwners.Add($owner)
-                }
-            }
-        }
+    $sqlSpOwners = @'
+with servicePrincipalOwners as (
+    select
+        id as spObjectId,
+        appId as spAppId,
+        displayName as spDisplayName,
+        unnest(
+            from_json(
+                case
+                    when json_type(owners) = 'ARRAY' then owners
+                    else json_array(owners)
+                end,
+                '[{"id":"VARCHAR"}]'
+            )
+        ).id as ownerId
+    from ServicePrincipal
+    where owners is not null
+)
+select
+    users.id,
+    users.displayName,
+    users.userPrincipalName,
+    servicePrincipalOwners.spDisplayName,
+    servicePrincipalOwners.spObjectId,
+    servicePrincipalOwners.spAppId
+from servicePrincipalOwners
+inner join User users on users.id = servicePrincipalOwners.ownerId
+where users.userType = 'Guest'
+order by servicePrincipalOwners.spDisplayName
+'@
+
+    $servicePrincipalOwnerRows = @(Invoke-DatabaseQuery -Database $Database -Sql $sqlSpOwners)
+
+    foreach ($owner in $servicePrincipalOwnerRows) {
+        $guestSpOwners.Add($owner)
     }
 
     $hasGuestAppOwners = $guestAppOwners.Count -gt 0
