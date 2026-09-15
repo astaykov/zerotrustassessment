@@ -86,6 +86,35 @@ Describe "Export-ZtGraphEntity" {
             Should -Invoke -ModuleName ZeroTrustAssessment -CommandName Invoke-ZtGraphBatchRequest -Times 0 -Exactly
         }
 
+        It "ServicePrincipal export narrows appRoleAssignments to the minimum required fields" {
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                param($ScriptBlock)
+                & $ScriptBlock
+                return @{
+                    value = @(
+                        @{ id = 'sp-1'; displayName = 'TestSP' }
+                    )
+                }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphBatchRequest { return @() }
+            Mock -ModuleName ZeroTrustAssessment Invoke-MgGraphRequest {
+                return @{
+                    value = @(
+                        @{ id = 'sp-1'; displayName = 'TestSP' }
+                    )
+                }
+            }
+            Mock -ModuleName ZeroTrustAssessment Get-ZtConfig { return $false }
+
+            Export-ZtGraphEntity -Name 'ServicePrincipal' -Uri 'beta/servicePrincipals' `
+                -QueryString '$expand=appRoleAssignments($select=id,appRoleId,principalId,resourceId)&$top=999&$select=id,appId,displayName,accountEnabled,servicePrincipalType,signInAudience,appOwnerOrganizationId,publisherName,replyUrls,preferredSingleSignOnMode,appRoleAssignmentRequired,tags,passwordCredentials,keyCredentials,appRoles,customSecurityAttributes,agentIdentityBlueprintId,createdByAppId' -RelatedPropertyNames @('oauth2PermissionGrants') `
+                -ExportPath $script:exportPath
+
+            Should -Invoke -ModuleName ZeroTrustAssessment -CommandName Invoke-MgGraphRequest -ParameterFilter {
+                $Uri -eq 'beta/servicePrincipals?$expand=appRoleAssignments($select=id,appRoleId,principalId,resourceId)&$top=999&$select=id,appId,displayName,accountEnabled,servicePrincipalType,signInAudience,appOwnerOrganizationId,publisherName,replyUrls,preferredSingleSignOnMode,appRoleAssignmentRequired,tags,passwordCredentials,keyCredentials,appRoles,customSecurityAttributes,agentIdentityBlueprintId,createdByAppId'
+            } -Times 1 -Exactly
+        }
+
         It "Invoke-ZtGraphBatchRequest is called once when the page has items" {
             # Verifies the guard does not suppress normal (non-empty) pages and correctly
             # skips the batch call on an empty second page.
