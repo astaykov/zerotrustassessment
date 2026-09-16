@@ -219,28 +219,30 @@ function Test-Assessment-41057 {
 
     #region Report Generation
 
-    $portalUrl = 'https://intune.microsoft.com/#view/Microsoft_Intune_Workflows/SecurityManagementMenu/~/asr'
-    $tableRows = @($evaluationResults | Select-Object -First 10 | ForEach-Object {
-        $displayName = (Get-SafeMarkdown -Text $_.ProfileName) -replace '\|', '\\|'
-        "| $displayName | $($_.Source) | $($_.ExploitProtectionXmlPresent) | $($_.OverrideBlocked) | $($_.AssignmentCount) | $($_.Status) |"
-    })
+    if ($evaluationResults.Count -gt 0) {
+        $portalUrl = 'https://intune.microsoft.com/#view/Microsoft_Intune_Workflows/SecurityManagementMenu/~/asr'
+        $tableRows = @($evaluationResults | Select-Object -First 10 | ForEach-Object {
+            $displayName = (Get-SafeMarkdown -Text $_.ProfileName) -replace '\|', '\\|'
+            "| $displayName | $($_.Source) | $($_.ExploitProtectionXmlPresent) | $($_.OverrideBlocked) | $($_.AssignmentCount) | $($_.Status) |"
+        })
 
-    if ($evaluationResults.Count -gt 10) {
-        $tableRows += "| ... | | | | | $($evaluationResults.Count) total profiles |"
-    }
-    if ($tableRows.Count -eq 0) {
-        $tableRows = '| No relevant profiles found | N/A | false | N/A | 0 | Investigate |'
-    }
+        if ($evaluationResults.Count -gt 10) {
+            $tableRows += "| ... | | | | | $($evaluationResults.Count) total profiles |"
+        }
 
-    $mdInfo = @"
+        $mdInfo = @"
 
 ## [Intune attack surface reduction policies]($portalUrl)
 
-| Profile Name | Source | Exploit Protection XML Present | Override Blocked | Assignment Count | Status |
+| Profile name | Source | Exploit protection XML present | Override blocked | Assignment count | Status |
 | :----------- | :----- | :----------------------------- | :--------------- | ---------------: | :----- |
 $($tableRows -join "`n")
 "@
-    $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
+        $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
+    }
+    else {
+        $testResultMarkdown = $testResultMarkdown -replace '\s*%TestResult%', ''
+    }
 
     $params = @{
         TestId = '41057'
