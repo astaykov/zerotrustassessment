@@ -147,13 +147,13 @@ function Test-Assessment-41117 {
 
 | Source | Category | Count |
 | :----- | :------- | ----: |
-        {0}
+{0}
 ### Recent submissions
 
-        {1}
+{1}
 | Created | Source | Category | Status | Result | Sender | Recipient | Subject |
 | :------ | :----- | :------- | :----- | :----- | :----- | :-------- | :------ |
-        {2}
+{2}
 '@
             $mdInfo = $formatTemplate -f $countRows, $recentSummary, $recentRows
         $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
