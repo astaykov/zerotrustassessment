@@ -55,7 +55,7 @@ function Test-Assessment-61011 {
 SELECT id, appId, displayName, agentIdentityBlueprintId
 FROM main.ServicePrincipal
 WHERE "@odata.type" = '#microsoft.graph.agentIdentity'
-    AND accountEnabled = 1
+  AND accountEnabled = 1
 ORDER BY displayName
 "@
     try {
