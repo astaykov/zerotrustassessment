@@ -58,6 +58,20 @@ function Export-ZtTenantData {
 	)
 
 	#region Helper Functions
+	function Resolve-ZtExportVariables {
+		param (
+			[string] $Value,
+			[hashtable] $Variables
+		)
+
+		[regex]::Replace($Value, '%(?<name>[^%]+)%', {
+			param ($match)
+
+			$name = $match.Groups['name'].Value
+			$Variables[$name]
+		})
+	}
+
 	function Get-ZtiAuditQueryString {
 		[CmdletBinding()]
 		param (
@@ -132,9 +146,9 @@ https://github.com/microsoft/zerotrustassessment/issues
 		$includedExports += $exportCfg.Name
 
 		# Insert dynamic data as prepared above
-		if ($exportCfg.Uri -like "%*%") { $exportCfg.Uri = $configVariables[$exportCfg.Uri.Trim("%")] }
-		if ($exportCfg.QueryString -like "%*%") { $exportCfg.QueryString = $configVariables[$exportCfg.QueryString.Trim("%")] }
-		if ($exportCfg.MaximumQueryTime -like "%*%") { $exportCfg.MaximumQueryTime = $configVariables[$exportCfg.MaximumQueryTime.Trim("%")] }
+		$exportCfg.Uri = Resolve-ZtExportVariables -Value $exportCfg.Uri -Variables $configVariables
+		$exportCfg.QueryString = Resolve-ZtExportVariables -Value $exportCfg.QueryString -Variables $configVariables
+		$exportCfg.MaximumQueryTime = Resolve-ZtExportVariables -Value $exportCfg.MaximumQueryTime -Variables $configVariables
 
 		$exportCfg
 	}
