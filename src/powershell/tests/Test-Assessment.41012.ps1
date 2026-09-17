@@ -44,12 +44,27 @@ function Test-Assessment-41012 {
         Result       = '⚠️ The Secure Score control profile or latest Secure Score snapshot could not be read due to a permission or connectivity error. Verify the caller has SecurityEvents.Read.All (Entra role: Security Reader) and re-run.'
     }
 
+    # Detect provider-warning annotations Graph emits on partial responses. HTTP 206 detection
+    # would additionally require Invoke-ZtGraphRequest to surface the status code (deferred).
+    $getPartialResultSignal = {
+        param($Response)
+        if ($null -eq $Response) { return $null }
+        $names = @($Response.PSObject.Properties.Name)
+        if ($names -contains '@odata.warning'        -and $Response.'@odata.warning')        { return '@odata.warning' }
+        if ($names -contains '@odata.partialResults' -and $Response.'@odata.partialResults') { return '@odata.partialResults' }
+        if ($names -contains 'warnings'              -and @($Response.warnings).Count -gt 0) { return 'warnings' }
+        return $null
+    }
+
     # Q1: filtered MDI Secure Score control profile.
+    # -DisablePaging retains the response envelope so provider warnings can be inspected; the
+    # $filter matches at most one profile, so paging behavior is not needed.
     Write-ZtProgress -Activity $activity -Status 'Retrieving the MDI Secure Score control profile'
+    $q1Response     = $null
     $profileResults = @()
     try {
-        $q1Filter = "service eq '$controlService' and id eq '$controlId'"
-        $profileResults = @(Invoke-ZtGraphRequest -RelativeUri 'security/secureScoreControlProfiles' -Filter $q1Filter -ApiVersion beta -ErrorAction Stop)
+        $q1Filter   = "service eq '$controlService' and id eq '$controlId'"
+        $q1Response = Invoke-ZtGraphRequest -RelativeUri 'security/secureScoreControlProfiles' -Filter $q1Filter -ApiVersion beta -DisablePaging -ErrorAction Stop
     }
     catch {
         $q1Status = Get-ZtHttpStatusCode -ErrorRecord $_
@@ -60,6 +75,20 @@ function Test-Assessment-41012 {
         Add-ZtTestResultDetail @investigateParams
         return
     }
+
+    $q1Warning = & $getPartialResultSignal $q1Response
+    if ($q1Warning) {
+        $investigateParams.Result = "⚠️ The Secure Score control profile response indicated partial results (``$q1Warning``); re-run the assessment."
+        Add-ZtTestResultDetail @investigateParams
+        return
+    }
+
+    if ($null -eq $q1Response -or $q1Response.PSObject.Properties.Name -notcontains 'value' -or $q1Response.value -is [string] -or $q1Response.value -isnot [System.Collections.IEnumerable]) {
+        $investigateParams.Result = '⚠️ The MDI Secure Score control profile response is missing or has a malformed value collection.'
+        Add-ZtTestResultDetail @investigateParams
+        return
+    }
+    $profileResults = @($q1Response.value)
 
     if ($profileResults.Count -ne 1) {
         $investigateParams.Result = "⚠️ The MDI Secure Score control profile lookup returned $($profileResults.Count) matching profile(s); exactly one is required."
@@ -89,6 +118,13 @@ function Test-Assessment-41012 {
     catch {
         $q2Status = Get-ZtHttpStatusCode -ErrorRecord $_
         Write-PSFMessage "Q2 failed. HTTP status: $q2Status. $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
+        Add-ZtTestResultDetail @investigateParams
+        return
+    }
+
+    $q2Warning = & $getPartialResultSignal $secureScoresResponse
+    if ($q2Warning) {
+        $investigateParams.Result = "⚠️ The Secure Score snapshot response indicated partial results (``$q2Warning``); re-run the assessment."
         Add-ZtTestResultDetail @investigateParams
         return
     }
@@ -148,9 +184,16 @@ function Test-Assessment-41012 {
                 $reason = 'The control profile contains a missing or unrecognized administrative state.'
                 break
             }
+            # Spec: distinguish an absent `updatedDateTime` property (malformed → Investigate) from
+            # an explicit null value (valid undated Default baseline). PowerShell returns $null for
+            # both cases when the property is read directly, so probe for property presence first.
+            if ($stateUpdate.PSObject.Properties.Name -notcontains 'updatedDateTime') {
+                $reason = 'The control profile contains a state update missing the updatedDateTime property.'
+                break
+            }
             $rawUpdatedAt = $stateUpdate.updatedDateTime
-            $isUpdatedAtMissing = ($null -eq $rawUpdatedAt) -or (($rawUpdatedAt -is [string]) -and [string]::IsNullOrWhiteSpace($rawUpdatedAt))
-            if ($isUpdatedAtMissing) {
+            $isUpdatedAtExplicitNull = ($null -eq $rawUpdatedAt) -or (($rawUpdatedAt -is [string]) -and [string]::IsNullOrWhiteSpace($rawUpdatedAt))
+            if ($isUpdatedAtExplicitNull) {
                 if ($state -ine 'Default') {
                     $reason = 'The control profile contains an undated non-Default administrative state.'
                 }
