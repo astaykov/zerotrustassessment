@@ -44,8 +44,7 @@ function Test-Assessment-41012 {
         Result       = '⚠️ The Secure Score control profile or latest Secure Score snapshot could not be read due to a permission or connectivity error. Verify the caller has SecurityEvents.Read.All (Entra role: Security Reader) and re-run.'
     }
 
-    # Detect provider-warning annotations Graph emits on partial responses. HTTP 206 detection
-    # would additionally require Invoke-ZtGraphRequest to surface the status code (deferred).
+    # Detect provider-warning annotations Graph emits on partial responses.
     $getPartialResultSignal = {
         param($Response)
         if ($null -eq $Response) { return $null }
@@ -56,39 +55,69 @@ function Test-Assessment-41012 {
         return $null
     }
 
-    # Q1: filtered MDI Secure Score control profile.
-    # -DisablePaging retains the response envelope so provider warnings can be inspected; the
-    # $filter matches at most one profile, so paging behavior is not needed.
-    Write-ZtProgress -Activity $activity -Status 'Retrieving the MDI Secure Score control profile'
-    $q1Response     = $null
-    $profileResults = @()
-    try {
-        $q1Filter   = "service eq '$controlService' and id eq '$controlId'"
-        $q1Response = Invoke-ZtGraphRequest -RelativeUri 'security/secureScoreControlProfiles' -Filter $q1Filter -ApiVersion beta -DisablePaging -ErrorAction Stop
-    }
-    catch {
-        $q1Status = Get-ZtHttpStatusCode -ErrorRecord $_
-        Write-PSFMessage "Q1 failed. HTTP status: $q1Status. $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
-        if ($q1Status -in (401, 403)) {
-            $investigateParams.Result = '⚠️ The Secure Score control profile could not be read because the request was not authorized. Verify the caller has SecurityEvents.Read.All (Entra role: Security Reader) and re-run.'
+    # Fetch a single Graph page using Invoke-MgGraphRequest so the HTTP status code and response
+    # envelope are both preserved. HTTP 206 and provider warnings map to Investigate per spec; 4xx
+    # and 5xx flow back to the caller as an error record.
+    $fetchGraphPage = {
+        param($Uri)
+        $statusCode = $null
+        try {
+            $response = Invoke-MgGraphRequest -Method GET -Uri $Uri -StatusCodeVariable statusCode -OutputType PSObject -ErrorAction Stop
         }
-        Add-ZtTestResultDetail @investigateParams
-        return
+        catch {
+            return [PSCustomObject]@{ Status = 'error'; HttpStatus = (Get-ZtHttpStatusCode -ErrorRecord $_); ErrorRecord = $_ }
+        }
+        if ($statusCode -eq 206) {
+            return [PSCustomObject]@{ Status = 'investigate'; Reason = 'HTTP 206 (partial content)' }
+        }
+        if ($statusCode -ne 200) {
+            return [PSCustomObject]@{ Status = 'investigate'; Reason = "unexpected HTTP status $statusCode" }
+        }
+        $warning = & $getPartialResultSignal $response
+        if ($warning) {
+            return [PSCustomObject]@{ Status = 'investigate'; Reason = "provider warning ``$warning``" }
+        }
+        return [PSCustomObject]@{ Status = 'ok'; Response = $response }
     }
 
-    $q1Warning = & $getPartialResultSignal $q1Response
-    if ($q1Warning) {
-        $investigateParams.Result = "⚠️ The Secure Score control profile response indicated partial results (``$q1Warning``); re-run the assessment."
-        Add-ZtTestResultDetail @investigateParams
-        return
+    # Q1: retrieve every filtered page of the MDI Secure Score control profile per spec — following
+    # @odata.nextLink when Graph provides one, bounded to a small page count so a runaway response
+    # produces Investigate instead of unbounded work.
+    Write-ZtProgress -Activity $activity -Status 'Retrieving the MDI Secure Score control profile'
+    $q1Filter        = "service eq '$controlService' and id eq '$controlId'"
+    $q1Uri           = "beta/security/secureScoreControlProfiles?`$filter=$([uri]::EscapeDataString($q1Filter))"
+    $q1MaxPages      = 20
+    $profileEntries  = [System.Collections.Generic.List[object]]::new()
+    for ($q1Page = 1; $q1Page -le $q1MaxPages; $q1Page++) {
+        $q1Result = & $fetchGraphPage $q1Uri
+        if ($q1Result.Status -eq 'error') {
+            $q1Status = $q1Result.HttpStatus
+            Write-PSFMessage "Q1 failed. HTTP status: $q1Status. $(Get-ZtSafeErrorMessage -ErrorRecord $q1Result.ErrorRecord)" -Tag Test -Level Warning
+            if ($q1Status -in (401, 403)) {
+                $investigateParams.Result = '⚠️ The Secure Score control profile could not be read because the request was not authorized. Verify the caller has SecurityEvents.Read.All (Entra role: Security Reader) and re-run.'
+            }
+            Add-ZtTestResultDetail @investigateParams
+            return
+        }
+        if ($q1Result.Status -eq 'investigate') {
+            $investigateParams.Result = "⚠️ The Secure Score control profile response was incomplete ($($q1Result.Reason)); re-run the assessment."
+            Add-ZtTestResultDetail @investigateParams
+            return
+        }
+        $q1Envelope = $q1Result.Response
+        if ($q1Envelope.PSObject.Properties.Name -contains 'value' -and $null -ne $q1Envelope.value) {
+            foreach ($v in @($q1Envelope.value)) { [void]$profileEntries.Add($v) }
+        }
+        $q1NextLink = if ($q1Envelope.PSObject.Properties.Name -contains '@odata.nextLink') { [string]$q1Envelope.'@odata.nextLink' } else { $null }
+        if ([string]::IsNullOrWhiteSpace($q1NextLink)) { break }
+        if ($q1Page -eq $q1MaxPages) {
+            $investigateParams.Result = "⚠️ The Secure Score control profile query returned more than $q1MaxPages pages; the tenant returned unexpectedly many matches — re-run the assessment."
+            Add-ZtTestResultDetail @investigateParams
+            return
+        }
+        $q1Uri = $q1NextLink
     }
-
-    if ($null -eq $q1Response -or $q1Response.PSObject.Properties.Name -notcontains 'value' -or $q1Response.value -is [string] -or $q1Response.value -isnot [System.Collections.IEnumerable]) {
-        $investigateParams.Result = '⚠️ The MDI Secure Score control profile response is missing or has a malformed value collection.'
-        Add-ZtTestResultDetail @investigateParams
-        return
-    }
-    $profileResults = @($q1Response.value)
+    $profileResults = @($profileEntries)
 
     if ($profileResults.Count -ne 1) {
         $investigateParams.Result = "⚠️ The MDI Secure Score control profile lookup returned $($profileResults.Count) matching profile(s); exactly one is required."
@@ -109,25 +138,22 @@ function Test-Assessment-41012 {
         return
     }
 
-    # Q2: latest Secure Score snapshot only; -DisablePaging keeps `$top=1` honest.
+    # Q2: latest Secure Score snapshot only; the spec forbids following @odata.nextLink into
+    # historical snapshots, so a single-page fetch with $top=1 is the whole query.
     Write-ZtProgress -Activity $activity -Status 'Retrieving the latest Microsoft Secure Score snapshot'
-    $secureScoresResponse = $null
-    try {
-        $secureScoresResponse = Invoke-ZtGraphRequest -RelativeUri 'security/secureScores' -Top 1 -ApiVersion beta -DisablePaging -ErrorAction Stop
-    }
-    catch {
-        $q2Status = Get-ZtHttpStatusCode -ErrorRecord $_
-        Write-PSFMessage "Q2 failed. HTTP status: $q2Status. $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
+    $q2Result = & $fetchGraphPage 'beta/security/secureScores?$top=1'
+    if ($q2Result.Status -eq 'error') {
+        $q2Status = $q2Result.HttpStatus
+        Write-PSFMessage "Q2 failed. HTTP status: $q2Status. $(Get-ZtSafeErrorMessage -ErrorRecord $q2Result.ErrorRecord)" -Tag Test -Level Warning
         Add-ZtTestResultDetail @investigateParams
         return
     }
-
-    $q2Warning = & $getPartialResultSignal $secureScoresResponse
-    if ($q2Warning) {
-        $investigateParams.Result = "⚠️ The Secure Score snapshot response indicated partial results (``$q2Warning``); re-run the assessment."
+    if ($q2Result.Status -eq 'investigate') {
+        $investigateParams.Result = "⚠️ The latest Secure Score snapshot response was incomplete ($($q2Result.Reason)); re-run the assessment."
         Add-ZtTestResultDetail @investigateParams
         return
     }
+    $secureScoresResponse = $q2Result.Response
     #endregion Data Collection
 
     #region Assessment Logic
