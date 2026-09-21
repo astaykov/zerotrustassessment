@@ -87,7 +87,7 @@ Note: Avoid using the same names as used for the "General Parameters" section of
 @{
 	Name = 'ServicePrincipal'
 	Uri = 'beta/servicePrincipals'
-	QueryString = '$expand=appRoleAssignments&$top=999&$select=id,deletedDateTime,accountEnabled,alternativeNames,createdByAppId,createdDateTime,deviceManagementAppType,appDescription,appDisplayName,appId,applicationTemplateId,appOwnerOrganizationId,appRoleAssignmentRequired,assignmentRequiredForPrincipalTypes,description,disabledByMicrosoftStatus,displayName,errorUrl,homepage,isAuthorizationServiceEnabled,isDisabled,isManagementRestricted,loginUrl,logoutUrl,notes,notificationEmailAddresses,preferredSingleSignOnMode,preferredTokenSigningKeyEndDateTime,preferredTokenSigningKeyThumbprint,publisherName,replyUrls,samlMetadataUrl,samlSLOBindingType,servicePrincipalNames,servicePrincipalType,signInAudience,tags,tokenEncryptionKeyId,certification,samlSingleSignOnSettings,addIns,api,appRoles,info,keyCredentials,publishedPermissionScopes,passwordCredentials,resourceSpecificApplicationPermissions,verifiedPublisher,customSecurityAttributes,agentIdentityBlueprintId'
+	QueryString = '$expand=appRoleAssignments($select=id,appRoleId,principalId,resourceId)&$top=999&$select=id,appId,displayName,accountEnabled,servicePrincipalType,signInAudience,appOwnerOrganizationId,publisherName,replyUrls,preferredSingleSignOnMode,appRoleAssignmentRequired,tags,passwordCredentials,keyCredentials,appRoles,customSecurityAttributes,agentIdentityBlueprintId,createdByAppId'
 	RelatedPropertyNames = @('oauth2PermissionGrants', 'owners')
 	Type = 'Default' # PrivilegedGroup
 
