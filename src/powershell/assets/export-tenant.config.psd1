@@ -195,7 +195,7 @@ Note: Avoid using the same names as used for the "General Parameters" section of
 @{
 	Name = 'RoleAssignment'
 	Uri = 'beta/roleManagement/directory/roleAssignments'
-	QueryString = '$expand=principal'
+	QueryString = '$expand=principal($select=id,displayName,userPrincipalName,uniqueName)&$select=id,principalOrganizationId,resourceScope,directoryScopeId,principalId,roleDefinitionId'
 	RelatedPropertyNames = @()
 	Type = 'Default' # PrivilegedGroup
 
