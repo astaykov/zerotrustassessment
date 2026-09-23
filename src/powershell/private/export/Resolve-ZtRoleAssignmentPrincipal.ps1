@@ -57,23 +57,26 @@ function Resolve-ZtRoleAssignmentPrincipal {
 	$typeDefinitions = @(
 		@{
 			ODataType = '#microsoft.graph.user'
+			ODataTypes = @('#microsoft.graph.user', '#microsoft.graph.agentUser')
 			RelativeUri = 'users'
 			Select = @('id', 'displayName', 'userPrincipalName')
 		},
 		@{
 			ODataType = '#microsoft.graph.group'
+			ODataTypes = @('#microsoft.graph.group')
 			RelativeUri = 'groups'
 			Select = @('id', 'displayName', 'uniqueName')
 		},
 		@{
 			ODataType = '#microsoft.graph.servicePrincipal'
+			ODataTypes = @('#microsoft.graph.servicePrincipal')
 			RelativeUri = 'servicePrincipals'
 			Select = @('id', 'displayName')
 		}
 	)
 
 	foreach ($typeDefinition in $typeDefinitions) {
-		$principalIds = @($unresolved.Keys | Where-Object { $unresolved[$_] -eq $typeDefinition.ODataType })
+		$principalIds = @($unresolved.Keys | Where-Object { $unresolved[$_] -in $typeDefinition.ODataTypes })
 		if (-not $principalIds) {
 			continue
 		}
@@ -85,8 +88,17 @@ function Resolve-ZtRoleAssignmentPrincipal {
 					continue
 				}
 
+				$cachedType = $Cache[$principal.id]['@odata.type']
+				$resolvedType = $principal.'@odata.type'
+				if (-not $resolvedType -or ($resolvedType -eq $typeDefinition.ODataType -and $cachedType -ne $typeDefinition.ODataType)) {
+					$resolvedType = $cachedType
+				}
+				if (-not $resolvedType) {
+					$resolvedType = $typeDefinition.ODataType
+				}
+
 				$Cache[$principal.id] = @{
-					'@odata.type' = $typeDefinition.ODataType
+					'@odata.type' = $resolvedType
 					id = $principal.id
 					displayName = $principal.displayName
 					userPrincipalName = $principal.userPrincipalName

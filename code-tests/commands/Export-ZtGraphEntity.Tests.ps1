@@ -234,6 +234,33 @@ Describe "Export-ZtGraphEntity" {
             $export.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.user'
         }
 
+        It "Preserves the agentUser subtype returned by the users endpoint" {
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                return @{ value = @(@{ id = 'assignment-1'; principalId = 'agent-user-1'; principal = @{ id = 'agent-user-1' } }) }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphRequest {
+                param($RelativeUri, $Method)
+                if ($Method -eq 'POST') {
+                    return @{ id = 'agent-user-1'; '@odata.type' = '#microsoft.graph.user' }
+                }
+                return @{
+                    id = 'agent-user-1'
+                    '@odata.type' = '#microsoft.graph.agentUser'
+                    displayName = 'Test Agent User'
+                    userPrincipalName = 'agent@contoso.com'
+                }
+            }
+
+            Export-ZtGraphEntity -Name 'RoleEligibilityScheduleInstance' `
+                -Uri 'beta/roleManagement/directory/roleEligibilityScheduleInstances' `
+                -QueryString '$expand=principal($select=id)' -ResolveRolePrincipals `
+                -ExportPath $script:roleExportPath
+
+            $export = Get-Content (Join-Path $script:roleExportPath 'RoleEligibilityScheduleInstance/RoleEligibilityScheduleInstance-0.json') -Raw | ConvertFrom-Json
+            $export.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.agentUser'
+            $export.value[0].principal.displayName | Should -Be 'Test Agent User'
+        }
+
         It "Preserves the identifier and type when a principal cannot be enriched" {
             Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
                 return @{ value = @(@{ id = 'assignment-1'; principalId = 'deleted-user'; principal = @{ id = 'deleted-user'; '@odata.type' = '#microsoft.graph.user' } }) }
