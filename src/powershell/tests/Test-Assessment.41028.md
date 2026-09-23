@@ -1,0 +1,9 @@
+When inbound mail to Exchange Online is routed first through a third-party gateway — a secure email gateway, an on-premises Exchange Edge transport, or another mail security appliance — the connecting IP that Exchange Online sees is the gateway, not the original sending host on the public internet. Without Enhanced Filtering for Connectors, all of Microsoft Defender for Office 365's IP-based protections — connection filtering, the spoof intelligence model, the DMARC and SPF evaluators, the implicit authentication signals used by anti-phishing, and bulk email classification — operate on the gateway IP and produce false negatives. A threat actor who has already evaded the upstream gateway gets a second free pass at Defender for Office 365 because every message appears to come from a trusted host. The argument that the upstream gateway is sufficient does not hold for spear phishing and business email compromise, where a novel payload bypasses the gateway and Defender for Office 365 cannot reapply IP reputation, sender authentication, or spoof intelligence because the original header chain is opaque. Enhanced Filtering parses the inbound message's header chain, identifies the original public sender IP, and feeds it back into the filtering stack so that Defender for Office 365's protections operate on the true origin.
+
+**Remediation action**
+
+- [Enhanced Filtering for Connectors in Exchange Online](https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/use-connectors-to-configure-mail-flow/enhanced-filtering-for-connectors)
+- [Set-InboundConnector](https://learn.microsoft.com/en-us/powershell/module/exchangepowershell/set-inboundconnector?view=exchange-ps)
+- [Configure mail flow with connectors in Exchange Online](https://learn.microsoft.com/en-us/exchange/mail-flow-best-practices/use-connectors-to-configure-mail-flow/use-connectors-to-configure-mail-flow)
+<!--- Results --->
+%TestResult%
