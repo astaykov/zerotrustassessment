@@ -62,7 +62,7 @@ resources
         Write-PSFMessage "ARG query returned $($capacities.Count) Security Copilot capacity resource(s)" -Tag Test -Level VeryVerbose
     }
     catch {
-        Write-PSFMessage "Azure Resource Graph query failed: $($_.Exception.Message)" -Tag Test -Level Warning
+        Write-PSFMessage "Azure Resource Graph query failed: $(Get-ZtSafeErrorMessage -ErrorRecord $_)" -Tag Test -Level Warning
         # Invoke-ZtAzureResourceGraphRequest throws "Azure REST request failed with status <code>: ..."
         $httpStatus = $null
         if ($_.Exception.Message -match 'with status (\d+):') { $httpStatus = [int]$Matches[1] }
