@@ -293,5 +293,31 @@ Describe "Export-ZtGraphEntity" {
             $export.value[0].principal.id | Should -Be 'deleted-user'
             $export.value[0].principal.'@odata.type' | Should -BeNullOrEmpty
         }
+
+        It "Aggregates warnings for principals that cannot be enriched" {
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                return @{ value = @(
+                    @{ id = 'assignment-1'; principalId = 'deleted-user-3'; principal = @{ id = 'deleted-user-3'; '@odata.type' = '#microsoft.graph.user' } }
+                    @{ id = 'assignment-2'; principalId = 'deleted-user-1'; principal = @{ id = 'deleted-user-1'; '@odata.type' = '#microsoft.graph.user' } }
+                    @{ id = 'assignment-3'; principalId = 'deleted-user-2'; principal = @{ id = 'deleted-user-2'; '@odata.type' = '#microsoft.graph.user' } }
+                ) }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphRequest { return @() }
+            Mock -ModuleName ZeroTrustAssessment Write-PSFMessage {}
+
+            Export-ZtGraphEntity -Name 'RoleEligibilityScheduleInstance' `
+                -Uri 'beta/roleManagement/directory/roleEligibilityScheduleInstances' `
+                -QueryString '$expand=principal($select=id)' -ResolveRolePrincipals `
+                -ExportPath $script:roleExportPath
+
+            Should -Invoke -ModuleName ZeroTrustAssessment -CommandName Write-PSFMessage -Times 1 -Exactly -ParameterFilter {
+                $Level -eq 'Warning' -and
+                $Message -eq '{0} role principals could not be enriched. Their identifiers and known types were preserved. Sample IDs: {1}' -and
+                $StringValues[0] -eq 3 -and
+                $StringValues[1] -eq 'deleted-user-1, deleted-user-2, deleted-user-3'
+            }
+            $export = Get-Content (Join-Path $script:roleExportPath 'RoleEligibilityScheduleInstance/RoleEligibilityScheduleInstance-0.json') -Raw | ConvertFrom-Json
+            @($export.value.principal.id) | Should -Be @('deleted-user-3', 'deleted-user-1', 'deleted-user-2')
+        }
     }
 }

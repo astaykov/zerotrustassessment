@@ -111,11 +111,10 @@ function Resolve-ZtRoleAssignmentPrincipal {
 		}
 	}
 
-	foreach ($principalId in $unresolved.Keys) {
-		$principal = $Cache[$principalId]
-		if (-not $principal.displayName) {
-			Write-PSFMessage -Level Warning -Message 'Role principal {0} could not be enriched. Preserving its identifier and type.' -StringValues $principalId -Tag Graph, Export
-		}
+	$unenrichedPrincipalIds = @($unresolved.Keys | Where-Object { -not $Cache[$_].displayName } | Sort-Object)
+	if ($unenrichedPrincipalIds) {
+		$sampleIds = @($unenrichedPrincipalIds | Select-Object -First 10) -join ', '
+		Write-PSFMessage -Level Warning -Message '{0} role principals could not be enriched. Their identifiers and known types were preserved. Sample IDs: {1}' -StringValues $unenrichedPrincipalIds.Count, $sampleIds -Tag Graph, Export
 	}
 
 	foreach ($assignment in $Assignments) {
