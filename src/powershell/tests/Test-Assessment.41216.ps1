@@ -143,7 +143,7 @@ resources
                 if ($parsedBudgetDate.ToUniversalTime() -gt $nowUtc) { $budgetActive = $false }
             }
             if ($budget.properties.timePeriod.endDate -and [datetime]::TryParse([string]$budget.properties.timePeriod.endDate, [ref]$parsedBudgetDate)) {
-                if ($parsedBudgetDate.ToUniversalTime() -lt $nowUtc) { $budgetActive = $false }
+                if ($parsedBudgetDate.ToUniversalTime().Date -lt $nowUtc.Date) { $budgetActive = $false }
             }
 
             $notifications = $budget.properties.notifications
