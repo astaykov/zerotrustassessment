@@ -13,7 +13,7 @@
 function Test-Assessment-41028 {
     [ZtTest(
         Category           = 'Email and collaboration security',
-        CompatibleLicense  = ('EXCHANGE_S_ENTERPRISE'), # update all aplicable SPs here
+        CompatibleLicense  = ('EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE','EXCHANGE_S_STANDARD_GOV','EXCHANGE_S_ENTERPRISE_GOV','EOP_ENTERPRISE','EOP_ENTERPRISE_PREMIUM'),
         ImplementationCost = 'Low',
         Pillar             = 'SecOps',
         RiskLevel          = 'High',
@@ -175,23 +175,29 @@ function Test-Assessment-41028 {
 
     $connectorsUrl = 'https://admin.exchange.microsoft.com/#/connectors'
     $tableIntro = if ($rows.Count -gt $maxDisplay) {
-        "Showing the first $maxDisplay of $($rows.Count) evaluated connectors. [View all connectors in the Exchange admin center]($connectorsUrl)`n`n"
+        "Showing the first $maxDisplay of $($rows.Count) evaluated connectors. [View all connectors in the Exchange admin center]($connectorsUrl)"
     }
     else {
         ''
     }
 
-    $table = @"
-${tableIntro}| Identity | Connector type | Enabled | Skip last IP | Skip IPs (count) | Skip mail gateway (count) | Test mode | Restricted users (count) | Result |
+    $mdInfo = @"
+
+$tableIntro
+
+| Identity | Connector type | Enabled | Skip last IP | Skip IPs (count) | Skip mail gateway (count) | Test mode | Restricted users (count) | Result |
 | :-------- | :------------- | :------ | :------------ | :---------------- | :------------------------ | :--------- | :------------------------ | :----- |
 $($tableRows.ToString())
 "@
+
+    $testResultMarkdown = $testResultMarkdown -replace '%TestResult%', $mdInfo
+    $testResultMarkdown = $testResultMarkdown -replace '\s*%TestResult%', ''
 
     $params = @{
         TestId = $testId
         Title  = $title
         Status = $passed
-        Result = $testResultMarkdown -replace '%TestResult%', $table
+        Result = $testResultMarkdown
     }
     if ($customStatus) {
         $params.CustomStatus = $customStatus
