@@ -9,8 +9,10 @@ Describe "Export-ZtGraphEntity" {
 
     BeforeAll {
         $srcRoot = Join-Path $PSScriptRoot "../../src/powershell"
-        if (-not (Get-Module ZeroTrustAssessment -ErrorAction SilentlyContinue)) {
-            Import-Module (Join-Path $srcRoot "ZeroTrustAssessment.psd1") -Global 3>$null
+        if (-not (Get-Command Export-ZtGraphEntity -ErrorAction SilentlyContinue)) {
+            if (-not (Get-Module ZeroTrustAssessment -ErrorAction SilentlyContinue)) {
+				Import-Module (Join-Path $srcRoot "ZeroTrustAssessment.psd1") -Global 3>$null
+            }
             Import-Module (Join-Path $srcRoot "ZeroTrustAssessment.psm1") -Global -Force 3>$null
         }
         if (-not (Get-Command Get-MgContext -ErrorAction SilentlyContinue)) {
@@ -211,6 +213,37 @@ Describe "Export-ZtGraphEntity" {
             $secondPage.value[0].principal.displayName | Should -Be 'Test User'
         }
 
+        It "Recovers an incomplete cached principal from richer data on a later page" {
+            $script:rolePage = 0
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                $script:rolePage++
+                if ($script:rolePage -eq 1) {
+                    return @{
+                        value = @(@{ id = 'assignment-1'; principalId = 'group-1'; principal = $null })
+                        '@odata.nextLink' = 'https://graph.microsoft.com/beta/roleManagement/directory/roleAssignmentScheduleInstances?$skiptoken=next'
+                    }
+                }
+                return @{ value = @(@{
+                    id = 'assignment-2'
+                    principalId = 'group-1'
+                    principal = @{ id = 'group-1'; '@odata.type' = '#microsoft.graph.group'; displayName = 'Recovered Group' }
+                }) }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphRequest { return @() }
+
+            Export-ZtGraphEntity -Name 'RoleAssignmentScheduleInstance' `
+                -Uri 'beta/roleManagement/directory/roleAssignmentScheduleInstances' `
+                -QueryString '$expand=principal($select=id)' -ResolveRolePrincipals `
+                -ExportPath $script:roleExportPath
+
+            Should -Invoke -ModuleName ZeroTrustAssessment -CommandName Invoke-ZtGraphRequest -Times 1 -Exactly -ParameterFilter {
+                $RelativeUri -eq 'directoryObjects/getByIds'
+            }
+            $secondPage = Get-Content (Join-Path $script:roleExportPath 'RoleAssignmentScheduleInstance/RoleAssignmentScheduleInstance-1.json') -Raw | ConvertFrom-Json
+            $secondPage.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.group'
+            $secondPage.value[0].principal.displayName | Should -Be 'Recovered Group'
+        }
+
         It "Resolves a missing principal type before querying the typed endpoint" {
             Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
                 return @{ value = @(@{ id = 'assignment-1'; principalId = 'user-1'; principal = @{ id = 'user-1' } }) }
@@ -259,6 +292,75 @@ Describe "Export-ZtGraphEntity" {
             $export = Get-Content (Join-Path $script:roleExportPath 'RoleEligibilityScheduleInstance/RoleEligibilityScheduleInstance-0.json') -Raw | ConvertFrom-Json
             $export.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.agentUser'
             $export.value[0].principal.displayName | Should -Be 'Test Agent User'
+        }
+
+        It "Enriches derived service-principal types through the service principals endpoint" {
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                return @{ value = @(
+                    @{
+                        id = 'assignment-1'
+                        principalId = 'agent-identity-1'
+                        principal = @{ id = 'agent-identity-1'; '@odata.type' = '#microsoft.graph.agentIdentity' }
+                    }
+                    @{
+                        id = 'assignment-2'
+                        principalId = 'blueprint-principal-1'
+                        principal = @{ id = 'blueprint-principal-1'; '@odata.type' = '#microsoft.graph.agentIdentityBlueprintPrincipal' }
+                    }
+                ) }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphRequest {
+                return @(
+                    @{
+                        id = 'agent-identity-1'
+                        '@odata.type' = '#microsoft.graph.agentIdentity'
+                        displayName = 'Agent'
+                    }
+                    @{
+                        id = 'blueprint-principal-1'
+                        '@odata.type' = '#microsoft.graph.agentIdentityBlueprintPrincipal'
+                        displayName = 'Agent Blueprint Principal'
+                    }
+                )
+            } -ParameterFilter { $RelativeUri -eq 'servicePrincipals' }
+
+            Export-ZtGraphEntity -Name 'RoleEligibilityScheduleInstance' `
+                -Uri 'beta/roleManagement/directory/roleEligibilityScheduleInstances' `
+                -QueryString '$expand=principal($select=id)' -ResolveRolePrincipals `
+                -ExportPath $script:roleExportPath
+
+            Should -Invoke -ModuleName ZeroTrustAssessment -CommandName Invoke-ZtGraphRequest -Times 1 -Exactly -ParameterFilter {
+                $RelativeUri -eq 'servicePrincipals'
+            }
+            $export = Get-Content (Join-Path $script:roleExportPath 'RoleEligibilityScheduleInstance/RoleEligibilityScheduleInstance-0.json') -Raw | ConvertFrom-Json
+            $export.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.agentIdentity'
+            $export.value[0].principal.displayName | Should -Be 'Agent'
+            $export.value[1].principal.'@odata.type' | Should -Be '#microsoft.graph.agentIdentityBlueprintPrincipal'
+            $export.value[1].principal.displayName | Should -Be 'Agent Blueprint Principal'
+        }
+
+        It "Retains expanded agent identity data when endpoint enrichment fails" {
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtRetry {
+                return @{ value = @(@{
+                    id = 'assignment-1'
+                    principalId = 'agent-identity-1'
+                    principal = @{
+                        id = 'agent-identity-1'
+                        '@odata.type' = '#microsoft.graph.agentIdentity'
+                        displayName = 'Expanded Agent'
+                    }
+                }) }
+            }
+            Mock -ModuleName ZeroTrustAssessment Invoke-ZtGraphRequest { return @() }
+
+            Export-ZtGraphEntity -Name 'RoleEligibilityScheduleInstance' `
+                -Uri 'beta/roleManagement/directory/roleEligibilityScheduleInstances' `
+                -QueryString '$expand=principal($select=id)' -ResolveRolePrincipals `
+                -ExportPath $script:roleExportPath
+
+            $export = Get-Content (Join-Path $script:roleExportPath 'RoleEligibilityScheduleInstance/RoleEligibilityScheduleInstance-0.json') -Raw | ConvertFrom-Json
+            $export.value[0].principal.'@odata.type' | Should -Be '#microsoft.graph.agentIdentity'
+            $export.value[0].principal.displayName | Should -Be 'Expanded Agent'
         }
 
         It "Preserves the identifier and type when a principal cannot be enriched" {
