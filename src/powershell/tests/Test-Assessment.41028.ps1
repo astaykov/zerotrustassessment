@@ -61,7 +61,7 @@ function Test-Assessment-41028 {
         $params = @{
             TestId         = $testId
             Title          = $title
-            Status         = $true
+            Status         = $false
             Result         = 'The tenant has no third-party email path declared.'
             SkippedBecause = 'NotApplicable'
         }
@@ -77,7 +77,7 @@ function Test-Assessment-41028 {
         $params = @{
             TestId         = $testId
             Title          = $title
-            Status         = $true
+            Status         = $false
             Result         = 'The tenant has no third-party email path declared.'
             SkippedBecause = 'NotApplicable'
         }
