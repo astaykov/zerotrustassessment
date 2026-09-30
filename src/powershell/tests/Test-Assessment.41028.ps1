@@ -130,29 +130,17 @@ function Test-Assessment-41028 {
     if ($failedRows.Count -gt 0) {
         $passed             = $false
         $customStatus       = $null
-        $testResultMarkdown = @'
-❌ One or more enabled inbound connectors lack Enhanced Filtering, are in test mode, or are restricted to a subset of users; Defender for Office 365 IP-based filtering is bypassed for traffic on those connectors.
-
-%TestResult%
-'@
+        $testResultMarkdown = "❌ One or more enabled inbound connectors lack Enhanced Filtering, are in test mode, or are restricted to a subset of users; Defender for Office 365 IP-based filtering is bypassed for traffic on those connectors.`n`n%TestResult%"
     }
     elseif ($investigateRows.Count -gt 0) {
         $passed             = $false
         $customStatus       = 'Investigate'
-        $testResultMarkdown = @'
-⚠️ Enhanced Filtering is partially configured (for example, `EFUsers` restricts the scope) — confirm whether this is intentional pilot scope.
-
-%TestResult%
-'@
+        $testResultMarkdown = "⚠️ Enhanced Filtering is partially configured (for example, ``EFUsers`` restricts the scope) — confirm whether this is intentional pilot scope.`n`n%TestResult%"
     }
     else {
         $passed             = $true
         $customStatus       = $null
-        $testResultMarkdown = @'
-✅ Enhanced Filtering for Connectors is configured on all enabled inbound connectors that receive mail from a third-party email gateway, and is enforcing (not in test mode) for all recipients.
-
-%TestResult%
-'@
+        $testResultMarkdown = "✅ Enhanced Filtering for Connectors is configured on all enabled inbound connectors that receive mail from a third-party email gateway, and is enforcing (not in test mode) for all recipients.`n`n%TestResult%"
     }
     #endregion Assessment Logic
 
@@ -174,14 +162,17 @@ function Test-Assessment-41028 {
     }
 
     $connectorsUrl = 'https://admin.exchange.microsoft.com/#/connectors'
+    $tableTitle = "## [Inbound connectors]($connectorsUrl)"
     $tableIntro = if ($rows.Count -gt $maxDisplay) {
-        "Showing the first $maxDisplay of $($rows.Count) evaluated connectors. [View all connectors in the Exchange admin center]($connectorsUrl)"
+        "Showing the first $maxDisplay of $($rows.Count) evaluated connectors."
     }
     else {
         ''
     }
 
     $mdInfo = @"
+
+$tableTitle
 
 $tableIntro
 
