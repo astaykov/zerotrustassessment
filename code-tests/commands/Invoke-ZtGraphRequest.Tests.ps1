@@ -7,6 +7,9 @@ Describe 'Invoke-ZtGraphRequest POST support' {
 			param($InputObjects, $Property)
 			$InputObjects.PSObject.Properties[$Property].Value
 		}
+		function global:Invoke-ZtGraphRequestCache {
+			param($Method, [uri]$Uri, $Headers, $Body, $OutputType, $DisableCache, $OutputFilePath, $PageIndex)
+		}
 		function global:ConvertTo-QueryString { param($InputObject) return $null }
 		function global:ConvertFrom-QueryString { param($InputStrings, $AsHashtable) return @{} }
 		function global:Get-MgContext { throw 'Graph context should not be resolved for validation failures.' }
@@ -101,7 +104,10 @@ Describe 'Invoke-ZtGraphRequest POST support' {
 		Mock Invoke-ZtGraphRequestCache {
 			param($Method, $Uri, $Body)
 			$script:requests.Add(@{ Method = $Method; Uri = $Uri; Body = $Body })
-			[pscustomobject]@{ responses = @() }
+			$batch = $Body | ConvertFrom-Json
+			[pscustomobject]@{ responses = @($batch.requests | ForEach-Object {
+				[pscustomobject]@{ id = $_.id; status = 200; body = [pscustomobject]@{ id = $_.url } }
+			}) }
 		}
 
 		Invoke-ZtGraphRequest -RelativeUri @('users', 'groups') | Out-Null
@@ -111,6 +117,175 @@ Describe 'Invoke-ZtGraphRequest POST support' {
 		$script:requests[0].Uri.AbsoluteUri | Should -Be 'https://graph.microsoft.com/v1.0/$batch'
 		Should -Invoke Get-MgContext -Times 1 -Exactly
 		Should -Invoke Get-MgEnvironment -Times 1 -Exactly
+	}
+
+	It 'retries only a throttled item from an otherwise successful batch' {
+		$script:batchCall = 0
+		$script:sleepSeconds = $null
+		Mock Start-Sleep { param($Seconds) $script:sleepSeconds = $Seconds }
+		Mock Invoke-ZtGraphRequestCache {
+			param($Method, $Uri, $Body)
+			$script:requests.Add(@{ Method = $Method; Uri = $Uri; Body = $Body })
+			$script:batchCall++
+			if ($script:batchCall -eq 1) {
+				return @{ responses = @(
+					@{ id = '0'; status = 200; body = @{ id = 'group-1'; displayName = 'Group One' } }
+					@{ id = '1'; status = 429; headers = @{ 'Retry-After' = '7' }; body = @{ error = @{ code = 'TooManyRequests' } } }
+				) }
+			}
+			return @{ responses = @(
+				@{ id = '1'; status = 200; body = @{ id = 'group-2'; displayName = 'Group Two' } }
+			) }
+		}
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('group-1', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/' -OutputType Hashtable)
+
+		$result.id | Should -Be @('group-1', 'group-2')
+		$script:requests | Should -HaveCount 2
+		(($script:requests[1].Body | ConvertFrom-Json).requests.id) | Should -Be '1'
+		$script:sleepSeconds | Should -Be 7
+	}
+
+	It 'retries an item-level server error with exponential backoff' {
+		$script:batchCall = 0
+		$script:sleepSeconds = $null
+		Mock Start-Sleep { param($Seconds) $script:sleepSeconds = $Seconds }
+		Mock Invoke-ZtGraphRequestCache {
+			$script:batchCall++
+			if ($script:batchCall -eq 1) {
+				return [pscustomobject]@{ responses = @(
+					[pscustomobject]@{ id = '0'; status = 503; body = [pscustomobject]@{ error = [pscustomobject]@{ code = 'ServiceUnavailable' } } }
+					[pscustomobject]@{ id = '1'; status = 200; body = [pscustomobject]@{ id = 'group-2' } }
+				) }
+			}
+			return [pscustomobject]@{ responses = @(
+				[pscustomobject]@{ id = '0'; status = 200; body = [pscustomobject]@{ id = 'group-1' } }
+			) }
+		}
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('group-1', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/')
+
+		$result.id | Should -Be @('group-1', 'group-2')
+		$script:batchCall | Should -Be 2
+		$script:sleepSeconds | Should -Be 3
+	}
+
+	It 'does not retry a terminal item-level client error' {
+		$script:batchCall = 0
+		$script:sleepCalled = $false
+		Mock Start-Sleep { $script:sleepCalled = $true }
+		Mock Invoke-ZtGraphRequestCache {
+			$script:batchCall++
+			return [pscustomobject]@{ responses = @(
+				[pscustomobject]@{ id = '0'; status = 404; body = [pscustomobject]@{ error = [pscustomobject]@{ code = 'Request_ResourceNotFound' } } }
+				[pscustomobject]@{ id = '1'; status = 200; body = [pscustomobject]@{ id = 'group-2' } }
+			) }
+		}
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('deleted-group', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/')
+
+		$result[0].error.code | Should -Be 'Request_ResourceNotFound'
+		$result[1].id | Should -Be 'group-2'
+		$script:batchCall | Should -Be 1
+		$script:sleepCalled | Should -BeFalse
+	}
+
+	It 'throws after transient item retries are exhausted without emitting partial results' {
+		$script:batchCall = 0
+		$script:sleepCalls = 0
+		Mock Start-Sleep { $script:sleepCalls++ }
+		Mock Invoke-ZtGraphRequestCache {
+			$script:batchCall++
+			return [pscustomobject]@{ responses = @(
+				[pscustomobject]@{ id = '0'; status = 200; body = [pscustomobject]@{ id = 'group-1' } }
+				[pscustomobject]@{ id = '1'; status = 429; headers = @{ 'Retry-After' = '1' }; body = [pscustomobject]@{ error = [pscustomobject]@{ code = 'TooManyRequests' } } }
+			) }
+		}
+
+		$output = @()
+		$caughtError = $null
+		try {
+			$output = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('group-1', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/')
+		}
+		catch {
+			$caughtError = $_
+		}
+
+		$output | Should -BeNullOrEmpty
+		$caughtError.Exception.Message | Should -BeLike '*item-level transient failures after 6 attempts*'
+		$script:batchCall | Should -Be 6
+		$script:sleepCalls | Should -Be 5
+	}
+
+	It 'retries an item omitted from a batch response' {
+		$script:batchCall = 0
+		Mock Start-Sleep {}
+		Mock Invoke-ZtGraphRequestCache {
+			param($Body)
+			$script:batchCall++
+			if ($script:batchCall -eq 1) {
+				return [pscustomobject]@{ responses = @(
+					[pscustomobject]@{ id = '0'; status = 200; body = [pscustomobject]@{ id = 'group-1' } }
+				) }
+			}
+			$retriedRequest = ($Body | ConvertFrom-Json).requests[0]
+			return [pscustomobject]@{ responses = @(
+				[pscustomobject]@{ id = $retriedRequest.id; status = 200; body = [pscustomobject]@{ id = 'group-2' } }
+			) }
+		}
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('group-1', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/')
+
+		$result.id | Should -Be @('group-1', 'group-2')
+		$script:batchCall | Should -Be 2
+	}
+
+	It 'retries items with missing or nonnumeric batch statuses' {
+		$script:batchCall = 0
+		Mock Start-Sleep {}
+		Mock Invoke-ZtGraphRequestCache {
+			$script:batchCall++
+			if ($script:batchCall -eq 1) {
+				return [pscustomobject]@{ responses = @(
+					[pscustomobject]@{ id = '0'; body = [pscustomobject]@{ id = 'invalid-result' } }
+					[pscustomobject]@{ id = '1'; status = 'invalid'; body = [pscustomobject]@{ id = 'invalid-result' } }
+				) }
+			}
+			return [pscustomobject]@{ responses = @(
+				[pscustomobject]@{ id = '0'; status = 200; body = [pscustomobject]@{ id = 'group-1' } }
+				[pscustomobject]@{ id = '1'; status = 200; body = [pscustomobject]@{ id = 'group-2' } }
+			) }
+		}
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId @('group-1', 'group-2') -GraphBaseUri 'https://graph.microsoft.com/')
+
+		$result.id | Should -Be @('group-1', 'group-2')
+		$script:batchCall | Should -Be 2
+	}
+
+	It 'rejects batch sizes outside the Microsoft Graph limit' {
+		{ Invoke-ZtGraphRequest -RelativeUri @('users', 'groups') -BatchSize 0 } | Should -Throw
+		{ Invoke-ZtGraphRequest -RelativeUri @('users', 'groups') -BatchSize 21 } | Should -Throw
+	}
+
+	It 'preserves request order and splits workloads at the default batch size' {
+		$script:batchBodies = [System.Collections.Generic.List[object]]::new()
+		Mock Invoke-ZtGraphRequestCache {
+			param($Body)
+			$batch = $Body | ConvertFrom-Json
+			$script:batchBodies.Add($batch)
+			return [pscustomobject]@{ responses = @($batch.requests | Sort-Object id -Descending | ForEach-Object {
+				[pscustomobject]@{ id = $_.id; status = 200; body = [pscustomobject]@{ id = $_.url } }
+			}) }
+		}
+		$ids = @(1..21 | ForEach-Object { "group-$_" })
+
+		$result = @(Invoke-ZtGraphRequest -RelativeUri 'groups' -UniqueId $ids -GraphBaseUri 'https://graph.microsoft.com/')
+
+		$script:batchBodies | Should -HaveCount 2
+		@($script:batchBodies[0].requests) | Should -HaveCount 20
+		@($script:batchBodies[1].requests) | Should -HaveCount 1
+		$result.id | Should -Be @($ids | ForEach-Object { "groups/$_" })
 	}
 }
 

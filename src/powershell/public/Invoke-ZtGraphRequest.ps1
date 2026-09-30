@@ -7,6 +7,7 @@
     * Filter, Select and Unique IDs as parameters
     * Automatic paging if Graph returns a nextLink
     * Batching of requests to Graph if multiple requests are piped through
+	* Item-level retries for throttled or transiently failed batch requests
     * Caching of results for the duration of the session
     * Ability to skip cache and go directly to Graph
     * Specify consistency level as a parameter
@@ -74,8 +75,9 @@ function Invoke-ZtGraphRequest {
 		# Force individual requests to MS Graph.
 		[Parameter(Mandatory = $false)]
 		[switch] $DisableBatching,
-		# Specify Batch size.
+		# Specify batch size, from 1 to the Microsoft Graph maximum of 20.
 		[Parameter(Mandatory = $false)]
+		[ValidateRange(1, 20)]
 		[int] $BatchSize = 20,
 		# Base URL for Microsoft Graph API.
 		[Parameter(Mandatory = $false)]
@@ -228,6 +230,78 @@ function Invoke-ZtGraphRequest {
 			return [uri] $script:__ZtSession.GraphBaseUri
 		}
 
+		function Invoke-GraphBatchChunk {
+			[CmdletBinding()]
+			param (
+				[object[]]
+				$Requests,
+
+				[uri]
+				$BatchUri
+			)
+
+			$pendingRequests = @($Requests)
+			$responsesById = @{}
+			$retryCount = 0
+			$retryDelay = 3
+			$maximumRetryCount = 5
+
+			while ($pendingRequests.Count -gt 0) {
+				$jsonRequests = New-Object psobject -Property @{ requests = $pendingRequests } | ConvertTo-Json -Depth 5
+
+				$batchResult = Invoke-ZtGraphRequestCache -Method POST -Uri $BatchUri.AbsoluteUri -Body $jsonRequests -OutputType $OutputType -DisableCache:$DisableCache
+				$responseLookup = @{}
+				foreach ($response in @($batchResult.responses)) {
+					if ($null -ne $response.id) {
+						$responseLookup[[string]$response.id] = $response
+					}
+				}
+
+				$retryRequests = [System.Collections.Generic.List[object]]::new()
+				$retryAfterSeconds = 0
+				foreach ($request in $pendingRequests) {
+					$requestId = [string]$request.id
+					$response = $responseLookup[$requestId]
+					$status = 0
+					if ($response) {
+						[void][int]::TryParse([string]$response.status, [ref]$status)
+					}
+					$isTransientFailure = -not $response -or $status -lt 100 -or $status -eq 429 -or ($status -ge 500 -and $status -le 599)
+
+					if ($isTransientFailure) {
+						$retryRequests.Add($request)
+						$currentRetryAfter = 0
+						if ($status -eq 429 -and [int]::TryParse([string]$response.headers.'Retry-After', [ref]$currentRetryAfter)) {
+							$retryAfterSeconds = [Math]::Max($retryAfterSeconds, $currentRetryAfter)
+						}
+						continue
+					}
+
+					$responsesById[$requestId] = $response
+				}
+
+				if ($retryRequests.Count -eq 0) {
+					break
+				}
+				if ($retryCount -ge $maximumRetryCount) {
+					throw "Graph batch contained $($retryRequests.Count) item-level transient failures after $($maximumRetryCount + 1) attempts."
+				}
+
+				$waitSeconds = [Math]::Max($retryDelay, $retryAfterSeconds)
+				Write-PSFMessage -Level Warning -Message 'Graph batch contained {0} transient item failures. Retrying those items in {1} seconds.' -StringValues $retryRequests.Count, $waitSeconds -Tag Graph, Retry
+				Start-Sleep -Seconds $waitSeconds
+				$pendingRequests = @($retryRequests)
+				$retryCount++
+				$retryDelay *= 2
+			}
+
+			foreach ($request in $Requests) {
+				$response = $responsesById[[string]$request.id]
+				Format-Result -Results $response.body -RawOutput $DisablePaging
+				Complete-Result -Results $response.body -DisablePaging $DisablePaging -RequestParam $requestParam
+			}
+		}
+
 		function Invoke-ResolvedGraphRequest {
 			param(
 				[string[]] $Uris
@@ -324,16 +398,7 @@ function Invoke-ZtGraphRequest {
 		$uriQueryEndpoint = [System.UriBuilder]::new([IO.Path]::Combine($resolvedGraphBaseUri.AbsoluteUri, $ApiVersion, '$batch'))
 		for ($iRequest = 0; $iRequest -lt $batchRequests.Count; $iRequest += $BatchSize) {
 			$indexEnd = [System.Math]::Min($iRequest + $BatchSize - 1, $batchRequests.Count - 1)
-			$jsonRequests = New-Object psobject -Property @{ requests = $batchRequests[$iRequest..$indexEnd] } | ConvertTo-Json -Depth 5
-			Write-Debug $jsonRequests
-
-			$resultsBatch = Invoke-ZtGraphRequestCache -Method POST -Uri $uriQueryEndpoint.Uri.AbsoluteUri -Body $jsonRequests -OutputType $OutputType -DisableCache:$DisableCache
-			$resultsBatch = $resultsBatch.responses | Sort-Object -Property id
-
-			foreach ($results in $resultsBatch.body) {
-				Format-Result -Results $results -RawOutput $DisablePaging
-				Complete-Result -Results $results -DisablePaging $DisablePaging -RequestParam $requestParam
-			}
+			Invoke-GraphBatchChunk -Requests @($batchRequests[$iRequest..$indexEnd]) -BatchUri $uriQueryEndpoint.Uri
 		}
 	}
 }
