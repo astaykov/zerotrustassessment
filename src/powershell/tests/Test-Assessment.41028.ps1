@@ -135,7 +135,7 @@ function Test-Assessment-41028 {
     elseif ($investigateRows.Count -gt 0) {
         $passed             = $false
         $customStatus       = 'Investigate'
-        $testResultMarkdown = "⚠️ Enhanced Filtering is partially configured (for example, ``EFUsers`` restricts the scope) — confirm whether this is intentional pilot scope.`n`n%TestResult%"
+        $testResultMarkdown = "⚠️ Enhanced Filtering is partially configured (for example, **EFUsers** restricts the scope) — confirm whether this is intentional pilot scope.`n`n%TestResult%"
     }
     else {
         $passed             = $true
