@@ -112,14 +112,12 @@ function New-ZtInteractiveConfig {
         $options = @(
             "Enable detailed logging",
             "Export logs to support package",
-            "Disable telemetry collection",
             "Resume from previous export"
         )
 
         $optionDescriptions = @{
             "Enable detailed logging" = "Shows verbose output during assessment execution"
             "Export logs to support package" = "Creates diagnostic files for troubleshooting"
-            "Disable telemetry collection" = "Prevents sending anonymous usage data to Microsoft"
             "Resume from previous export" = "Reuses the existing export and database, skipping data collection and database rebuild"
         }
 
@@ -173,7 +171,6 @@ function New-ZtInteractiveConfig {
 
         $configData.ShowLog = $selectedOptions -contains "Enable detailed logging"
         $configData.ExportLog = $selectedOptions -contains "Export logs to support package"
-        $configData.DisableTelemetry = $selectedOptions -contains "Disable telemetry collection"
         $configData.Resume = $selectedOptions -contains "Resume from previous export"
 
         # Enhanced test IDs collection
@@ -220,7 +217,6 @@ function New-ZtInteractiveConfig {
             Write-SpectreHost "  [cyan1]Report output path:[/] $($configData.Path)"
             Write-SpectreHost "  [cyan1]Detailed logging:[/] $($configData.ShowLog)"
             Write-SpectreHost "  [cyan1]Export logs:[/] $($configData.ExportLog)"
-            Write-SpectreHost "  [cyan1]Telemetry disabled:[/] $($configData.DisableTelemetry)"
             Write-SpectreHost "  [cyan1]Resume mode:[/] $($configData.Resume)"
 
             if ($configData.Tests) {

@@ -216,7 +216,6 @@ The most commonly used parameters are described below. All parameters are option
 | `-ShowLog` | Prints a high-level summary of log messages to the console. |
 | `-ExportLog` | Writes the log to a file. |
 | `-ConfigurationFile <path>` | Path to a JSON configuration file. Command-line parameters override values from the file. |
-| `-DisableTelemetry` | Disables telemetry collection (by default only the tenant ID is collected). |
 | `-Timeout <timespan>` | Maximum time to wait for all tests before giving up (default 24 hours). Supports humanized input notation, such as `12h` or `3d`. |
 | `-TestTimeout <minutes/timespan>` | Maximum time a single test may run (default 60; `0` = disabled). Supports humanized input notation, such as `30m`, `2h`, or `'2h 15m'`. |
 | `-ExportThrottleLimit <n>` / `-TestThrottleLimit <n>` | Maximum number of parallel data collectors / tests (default 5 each). |

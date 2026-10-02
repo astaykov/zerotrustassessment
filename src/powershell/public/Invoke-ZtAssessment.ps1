@@ -29,9 +29,6 @@ If specified, writes the log to a file.
 If specified, suppresses automatic browser opening for both the progress dashboard and the final HTML report.
 The progress dashboard server will not be started and the report will not be opened in the browser at the end.
 
-.PARAMETER DisableTelemetry
-If specified, disables the collection of telemetry. The only telemetry collected is the tenant id. Defaults to false.
-
 .PARAMETER Tests
 The IDs of the specific test(s) to run. If not specified, all tests will be run.
 
@@ -138,11 +135,6 @@ function Invoke-ZtAssessment {
 		[switch]
 		$ExportLog,
 
-		# If specified, disables the collection of telemetry. The only telemetry collected is the tenant id. Defaults to true.
-		[Parameter(ParameterSetName = 'Default')]
-		[switch]
-		$DisableTelemetry = $false,
-
 		# The IDs of the specific test(s) to run. If not specified, all tests will be run.
 		[Parameter(ParameterSetName = 'Default')]
 		[string[]]
@@ -242,17 +234,6 @@ $titleLine
 		Write-Host
 		Write-Host "🚀 " -NoNewline -ForegroundColor Green
 		Write-Host "Starting Zero Trust Assessment..." -ForegroundColor White
-		Write-Host "⚠️ " -NoNewline -ForegroundColor Yellow
-		Write-Host @"
-This run will send ONLY your tenant ID (GUID) to Microsoft for telemetry
-purposes. No information about the system running this script, no assessment
-results, and no other data will be collected or sent for telemetry. You can
-disable telemetry by using the -DisableTelemetry switch.
-"@ -ForegroundColor Yellow
-		Write-Host @"
-Review the telemetry implementation (Send-ZtAppInsightsTelemetry):
-https://github.com/microsoft/zerotrustassessment/blob/3a3f0966dffaa11ff8fe36db5cc602c8aef741c1/src/powershell/public/Invoke-ZtAssessment.ps1#L464
-"@ -ForegroundColor Cyan
 		Write-Host
 	}
 	#endregion Utility Functions
@@ -297,7 +278,7 @@ https://github.com/microsoft/zerotrustassessment/blob/3a3f0966dffaa11ff8fe36db5c
 			$configContent = Get-Content -Path $ConfigurationFile -Raw | ConvertFrom-Json
 
 			# Define parameters that can be configured
-			$configurableParameters = @('Path', 'Days', 'MaximumSignInLogQueryTime', 'ShowLog', 'ExportLog', 'DisableTelemetry', 'Resume', 'Tests', 'TestTimeout')
+			$configurableParameters = @('Path', 'Days', 'MaximumSignInLogQueryTime', 'ShowLog', 'ExportLog', 'Resume', 'Tests', 'TestTimeout')
 
 			# Apply configuration values only if parameters weren't explicitly provided
 			foreach ($paramName in $configurableParameters) {
@@ -375,7 +356,6 @@ https://github.com/microsoft/zerotrustassessment/blob/3a3f0966dffaa11ff8fe36db5c
 	# 		$MaximumSignInLogQueryTime = $config.MaximumSignInLogQueryTime
 	# 		$ShowLog = $config.ShowLog
 	# 		$ExportLog = $config.ExportLog
-	# 		$DisableTelemetry = $config.DisableTelemetry
 	# 		$Resume = $config.Resume
 
 	# 		if ($config.PSObject.Properties.Name -contains 'Tests' -and $config.Tests.Count -gt 0) {
@@ -471,20 +451,6 @@ https://github.com/microsoft/zerotrustassessment/blob/3a3f0966dffaa11ff8fe36db5c
 	$null = New-Item -ItemType Directory -Path (Join-Path $logsPath '1-Export') -Force -ErrorAction Stop
 	$null = New-Item -ItemType Directory -Path (Join-Path $logsPath '2-Tests') -Force -ErrorAction Stop
 
-
-	# Send telemetry if not disabled
-	if (-not $DisableTelemetry) {
-		try {
-			$tenantId = (Get-MgContext).TenantId
-			if ($tenantId) {
-				Send-ZtAppInsightsTelemetry -EventName "ZTv2TenantId" -Properties @{ TenantId = $tenantId }
-			}
-		}
-		catch {
-			# Silently continue if sending telemetry fails
-			Write-PSFMessage -Level Debug -Message "Failed to send telemetry: $_"
-		}
-	}
 
 	Clear-ZtModuleVariable # Reset the graph cache and urls to avoid stale data
 	$script:__ZtSession.PreviewEnabled = $Preview.IsPresent
