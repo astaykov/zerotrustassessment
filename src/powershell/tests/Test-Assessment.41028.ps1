@@ -130,7 +130,7 @@ function Test-Assessment-41028 {
     if ($failedRows.Count -gt 0) {
         $passed             = $false
         $customStatus       = $null
-        $testResultMarkdown = "❌ One or more enabled inbound connectors lack Enhanced Filtering, are in test mode, or are restricted to a subset of users; Defender for Office 365 IP-based filtering is bypassed for traffic on those connectors.`n`n%TestResult%"
+        $testResultMarkdown = "❌ One or more enabled inbound connectors lack Enhanced Filtering or are in test mode; Defender for Office 365 IP-based filtering is bypassed for traffic on those connectors.`n`n%TestResult%"
     }
     elseif ($investigateRows.Count -gt 0) {
         $passed             = $false
