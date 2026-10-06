@@ -43,7 +43,8 @@ function Test-Assessment-41028 {
                           EFSkipMailGateway, EFUsers, EFTestMode)
     }
     catch {
-        Write-PSFMessage "Failed to retrieve inbound connectors: $_" -Tag Test -Level Warning
+        $safeError = New-ZtSafeErrorRecord -ErrorRecord $_
+        Write-PSFMessage "Failed to retrieve inbound connectors: $($safeError.Exception.Message)" -Tag Test -Level Warning -ErrorRecord $safeError
         $params = @{
             TestId       = $testId
             Title        = $title
@@ -69,6 +70,9 @@ function Test-Assessment-41028 {
         return
     }
 
+    # Spec scope: enabled inbound connectors of type OnPremises or Partner are the assessment target.
+    # Sender-domain scoping is intentionally not used here; the requirement is based on the gateway path
+    # and connector type, not on whether a connector is restricted to specific sender domains.
     $evaluatedConnectors = @($connectors | Where-Object {
         $_.Enabled -eq $true -and $_.ConnectorType -in @('OnPremises', 'Partner')
     })
